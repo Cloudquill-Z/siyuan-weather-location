@@ -115,7 +115,9 @@ const DEFAULT_CONFIG: PluginConfig = {
   template: `## 今日天气与位置
 
 🌤 **天气状况**: {{weather.description}}
-🌡 **当前温度**: {{weather.temperature}}°C
+{{#if weather.dayWeather}}☀️ **白天天气**: {{weather.dayWeather}}
+{{/if}}{{#if weather.nightWeather}}🌙 **夜间天气**: {{weather.nightWeather}}
+{{/if}}🌡 **当前温度**: {{weather.temperature}}°C
 {{#if weather.feelsLike}}🤔 **体感温度**: {{weather.feelsLike}}°C
 {{/if}}💧 **相对湿度**: {{weather.humidity}}%
 🌬 **风向**: {{weather.windDirection}}
@@ -1314,12 +1316,18 @@ class WeatherLocationPlugin extends Plugin {
     const helpContent = `# 模板变量说明
 
 ## 天气变量 (weather)
-- {{weather.description}} - 天气描述
+- {{weather.description}} - 全天天气描述 (如: 晴转多云, 全天晴朗)
+- {{weather.dayWeather}} - 白天天气
+- {{weather.nightWeather}} - 夜间天气
 - {{weather.temperature}} - 当前温度 (°C)
 - {{weather.humidity}} - 湿度 (%)
 - {{weather.windSpeed}} - 风速 (m/s)
-- {{weather.windDirection}} - 风向 (如: 北风, 东南风)
-- {{weather.windPower}} - 风力等级 (如: 3级)
+- {{weather.windDirection}} - 当前风向 (如: 北风, 东南风)
+- {{weather.windPower}} - 当前风力等级 (如: 3级)
+- {{weather.dayWindDirection}} - 白天风向
+- {{weather.nightWindDirection}} - 夜间风向
+- {{weather.dayWindPower}} - 白天风力等级
+- {{weather.nightWindPower}} - 夜间风力等级
 - {{weather.pressure}} - 气压 (hPa)
 - {{weather.visibility}} - 能见度 (km)
 - {{weather.feelsLike}} - 体感温度 (°C)

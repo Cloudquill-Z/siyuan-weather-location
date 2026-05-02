@@ -13,6 +13,12 @@ export interface WeatherData {
   sunset?: string;
   windDirection?: string;
   windPower?: string;
+  dayWeather?: string;
+  nightWeather?: string;
+  dayWindDirection?: string;
+  nightWindDirection?: string;
+  dayWindPower?: string;
+  nightWindPower?: string;
 }
 
 interface PluginConfig {
@@ -290,29 +296,58 @@ export class WeatherService {
         throw new Error('温度数据格式无效');
       }
       
-      // 解析预报数据中的最低/最高温度
+      // 解析预报数据：温度、白天/夜间天气、风力
       let tempMin: number | undefined;
       let tempMax: number | undefined;
-      
+      let dayWeather: string | undefined;
+      let nightWeather: string | undefined;
+      let dayWindDirection: string | undefined;
+      let nightWindDirection: string | undefined;
+      let dayWindPower: string | undefined;
+      let nightWindPower: string | undefined;
+
       if (todayCast) {
         const rawNightTemp = todayCast.nighttemp;
         const rawDayTemp = todayCast.daytemp;
-        
+
         if (rawNightTemp !== undefined && rawNightTemp !== null && rawNightTemp !== '') {
           const parsedNightTemp = parseInt(rawNightTemp);
           if (!isNaN(parsedNightTemp)) {
             tempMin = parsedNightTemp;
           }
         }
-        
+
         if (rawDayTemp !== undefined && rawDayTemp !== null && rawDayTemp !== '') {
           const parsedDayTemp = parseInt(rawDayTemp);
           if (!isNaN(parsedDayTemp)) {
             tempMax = parsedDayTemp;
           }
         }
+
+        dayWeather = todayCast.dayweather || undefined;
+        nightWeather = todayCast.nightweather || undefined;
+        dayWindDirection = todayCast.daywind || undefined;
+        nightWindDirection = todayCast.nightwind || undefined;
+        if (todayCast.daypower) {
+          dayWindPower = todayCast.daypower.replace('≤', '') + '级';
+        }
+        if (todayCast.nightpower) {
+          nightWindPower = todayCast.nightpower.replace('≤', '') + '级';
+        }
       }
-      
+
+      // 用预报数据构建全天天气描述
+      let description: string;
+      if (dayWeather && nightWeather) {
+        if (dayWeather === nightWeather) {
+          description = `全天${dayWeather}`;
+        } else {
+          description = `${dayWeather}转${nightWeather}`;
+        }
+      } else {
+        description = live.weather;
+      }
+
       console.log('[WeatherService] 高德天气数据:', {
         rawHumidity,
         parsedHumidity,
@@ -321,25 +356,33 @@ export class WeatherService {
         temperature,
         tempMin,
         tempMax,
-        weather: live.weather
+        description,
+        dayWeather,
+        nightWeather
       });
-      
-      if (!live.weather) {
+
+      if (!description) {
         throw new Error('天气描述为空');
       }
 
       return {
-        description: live.weather,
+        description,
         temperature: temperature,
         humidity: humidity,
         windSpeed: this.parseWindSpeed(windPower),
-        pressure: undefined, // 高德API不返回气压数据，不设置固定值
-        visibility: undefined, // 高德API不返回能见度数据，不设置固定值
+        pressure: undefined,
+        visibility: undefined,
         icon: '',
-        tempMin: tempMin,
-        tempMax: tempMax,
+        tempMin,
+        tempMax,
         windDirection: live.winddirection || undefined,
-        windPower: windPower.replace('≤', '') + '级'
+        windPower: windPower.replace('≤', '') + '级',
+        dayWeather,
+        nightWeather,
+        dayWindDirection,
+        nightWindDirection,
+        dayWindPower,
+        nightWindPower
       } as WeatherData;
     } catch (error) {
       console.error('[WeatherService] 高德天气API错误:', error);
