@@ -1,12 +1,8 @@
 import { App, showMessage, Dialog } from 'siyuan';
 
 interface PluginConfig {
-  weatherApiKey: string;
-  weatherProvider: 'openweather' | 'amap';
-  locationProvider: 'ip' | 'amap' | 'manual';
-  manualLocation: string;
-  template: string;
   amapKey: string;
+  template: string;
 }
 
 export class SettingTab {
@@ -52,183 +48,40 @@ export class SettingTab {
     section.className = 'config__tab-container-item';
 
     const title = document.createElement('h3');
-    title.textContent = '天气设置';
+    title.textContent = '高德地图设置';
     section.appendChild(title);
 
-    // 天气提供商选择
-    const providerItem = document.createElement('div');
-    providerItem.className = 'config__item';
-    
-    const providerLabel = document.createElement('label');
-    providerLabel.className = 'config__item-label';
-    providerLabel.textContent = '天气数据源';
-    providerItem.appendChild(providerLabel);
+    // 高德 Key 输入
+    const keyItem = document.createElement('div');
+    keyItem.className = 'config__item';
 
-    const providerSelect = document.createElement('select');
-    providerSelect.className = 'config__item-select';
-    
-    const providers = [
-      { value: 'openweather', label: 'OpenWeatherMap (国际)' },
-      { value: 'amap', label: '高德地图 (中国)' }
-    ];
+    const keyLabel = document.createElement('label');
+    keyLabel.className = 'config__item-label';
+    keyLabel.textContent = '高德地图 Key';
+    keyItem.appendChild(keyLabel);
 
-    providers.forEach(p => {
-      const option = document.createElement('option');
-      option.value = p.value;
-      option.textContent = p.label;
-      if (p.value === this.config.weatherProvider) {
-        option.selected = true;
-      }
-      providerSelect.appendChild(option);
+    const keyInput = document.createElement('input');
+    keyInput.type = 'text';
+    keyInput.className = 'config__item-input';
+    keyInput.placeholder = '天气和位置均需此 Key';
+    keyInput.value = this.config.amapKey;
+    keyInput.addEventListener('change', (e) => {
+      this.config.amapKey = (e.target as HTMLInputElement).value;
     });
 
-    providerSelect.addEventListener('change', (e) => {
-      this.config.weatherProvider = (e.target as HTMLSelectElement).value as any;
-    });
+    keyItem.appendChild(keyInput);
+    section.appendChild(keyItem);
 
-    providerItem.appendChild(providerSelect);
-    section.appendChild(providerItem);
-
-    // API Key 输入
-    const apiKeyItem = document.createElement('div');
-    apiKeyItem.className = 'config__item';
-
-    const apiKeyLabel = document.createElement('label');
-    apiKeyLabel.className = 'config__item-label';
-    apiKeyLabel.textContent = '天气 API Key';
-    apiKeyItem.appendChild(apiKeyLabel);
-
-    const apiKeyInput = document.createElement('input');
-    apiKeyInput.type = 'text';
-    apiKeyInput.className = 'config__item-input';
-    apiKeyInput.placeholder = '请输入 API Key';
-    apiKeyInput.value = this.config.weatherApiKey;
-    apiKeyInput.addEventListener('change', (e) => {
-      this.config.weatherApiKey = (e.target as HTMLInputElement).value;
-    });
-
-    apiKeyItem.appendChild(apiKeyInput);
-    section.appendChild(apiKeyItem);
-
-    // API 说明
-    const apiHelp = document.createElement('div');
-    apiHelp.className = 'config__item-help';
-    apiHelp.innerHTML = `
-      <p>• OpenWeatherMap: 访问 <a href="https://openweathermap.org/api" target="_blank">openweathermap.org</a> 获取免费 API Key</p>
-      <p>• 高德地图: 访问 <a href="https://lbs.amap.com/" target="_blank">lbs.amap.com</a> 获取 Key</p>
-    `;
-    section.appendChild(apiHelp);
+    const help = document.createElement('div');
+    help.className = 'config__item-help';
+    help.innerHTML = '<p>前往 <a href="https://lbs.amap.com/" target="_blank">高德开放平台</a> 申请 Key，天气和位置功能共用同一个 Key</p>';
+    section.appendChild(help);
 
     element.appendChild(section);
   }
 
   private createLocationSection(element: HTMLElement): void {
-    const section = document.createElement('div');
-    section.className = 'config__tab-container-item';
-
-    const title = document.createElement('h3');
-    title.textContent = '位置设置';
-    section.appendChild(title);
-
-    // 位置提供商选择
-    const providerItem = document.createElement('div');
-    providerItem.className = 'config__item';
-
-    const providerLabel = document.createElement('label');
-    providerLabel.className = 'config__item-label';
-    providerLabel.textContent = '位置获取方式';
-    providerItem.appendChild(providerLabel);
-
-    const providerSelect = document.createElement('select');
-    providerSelect.className = 'config__item-select';
-
-    const providers = [
-      { value: 'ip', label: 'IP定位 (自动)' },
-      { value: 'amap', label: '高德定位 (需要定位权限)' },
-      { value: 'manual', label: '手动设置' }
-    ];
-
-    providers.forEach(p => {
-      const option = document.createElement('option');
-      option.value = p.value;
-      option.textContent = p.label;
-      if (p.value === this.config.locationProvider) {
-        option.selected = true;
-      }
-      providerSelect.appendChild(option);
-    });
-
-    const manualLocationItem = document.createElement('div');
-    manualLocationItem.className = 'config__item';
-    manualLocationItem.style.display = 
-      this.config.locationProvider === 'manual' ? 'block' : 'none';
-
-    providerSelect.addEventListener('change', (e) => {
-      this.config.locationProvider = (e.target as HTMLSelectElement).value as any;
-      // 显示/隐藏手动位置输入
-      manualLocationItem.style.display = 
-        this.config.locationProvider === 'manual' ? 'block' : 'none';
-      // 显示/隐藏高德地图 Key
-      amapKeyItem.style.display = 
-        this.config.locationProvider === 'amap' ? 'block' : 'none';
-    });
-
-    providerItem.appendChild(providerSelect);
-    section.appendChild(providerItem);
-
-    // 高德地图 Key 输入
-    const amapKeyItem = document.createElement('div');
-    amapKeyItem.className = 'config__item';
-    amapKeyItem.style.display = 
-      this.config.locationProvider === 'amap' ? 'block' : 'none';
-
-    const amapKeyLabel = document.createElement('label');
-    amapKeyLabel.className = 'config__item-label';
-    amapKeyLabel.textContent = '高德地图 Key';
-    amapKeyItem.appendChild(amapKeyLabel);
-
-    const amapKeyInput = document.createElement('input');
-    amapKeyInput.type = 'text';
-    amapKeyInput.className = 'config__item-input';
-    amapKeyInput.placeholder = '使用高德服务时需要';
-    amapKeyInput.value = this.config.amapKey;
-    amapKeyInput.addEventListener('change', (e) => {
-      this.config.amapKey = (e.target as HTMLInputElement).value;
-    });
-
-    amapKeyItem.appendChild(amapKeyInput);
-    section.appendChild(amapKeyItem);
-
-    // 手动位置输入
-    const manualLocationLabel = document.createElement('label');
-    manualLocationLabel.className = 'config__item-label';
-    manualLocationLabel.textContent = '手动位置';
-    manualLocationItem.appendChild(manualLocationLabel);
-
-    const manualLocationInput = document.createElement('input');
-    manualLocationInput.type = 'text';
-    manualLocationInput.className = 'config__item-input';
-    manualLocationInput.placeholder = '城市名,纬度,经度 (如: 北京,39.9,116.4)';
-    manualLocationInput.value = this.config.manualLocation;
-    manualLocationInput.addEventListener('change', (e) => {
-      this.config.manualLocation = (e.target as HTMLInputElement).value;
-    });
-
-    manualLocationItem.appendChild(manualLocationInput);
-    section.appendChild(manualLocationItem);
-
-    // 位置说明
-    const locationHelp = document.createElement('div');
-    locationHelp.className = 'config__item-help';
-    locationHelp.innerHTML = `
-      <p>• IP定位: 自动根据网络IP获取大致位置，无需配置。支持多个备用服务</p>
-      <p>• 高德定位: 使用浏览器定位获取精确位置，需要高德Key和浏览器定位权限</p>
-      <p>• 手动设置: 固定使用设置的位置，格式: 城市名,纬度,经度 (如: 长沙,28.2,112.9)</p>
-      <p style="color: #ff4d4f; margin-top: 8px;">⚠️ 注意: 如果无法获取位置，请检查网络连接或配置手动位置</p>
-    `;
-    section.appendChild(locationHelp);
-
-    element.appendChild(section);
+    // 位置设置已合并到高德地图设置中，此方法保留空实现以兼容旧代码
   }
 
   private createTemplateSection(element: HTMLElement): void {
@@ -352,19 +205,20 @@ export class SettingTab {
     const helpContent = `# 模板变量说明
 
 ## 天气变量 (weather)
-- {{weather.description}} - 天气描述
+- {{weather.description}} - 全天天气描述 (如: 晴转多云, 全天晴朗)
+- {{weather.dayWeather}} - 白天天气
+- {{weather.nightWeather}} - 夜间天气
 - {{weather.temperature}} - 当前温度 (°C)
 - {{weather.humidity}} - 湿度 (%)
 - {{weather.windSpeed}} - 风速 (m/s)
-- {{weather.windDirection}} - 风向 (如: 北风, 东南风)
-- {{weather.windPower}} - 风力等级 (如: 3级)
-- {{weather.pressure}} - 气压 (hPa)
-- {{weather.visibility}} - 能见度 (km)
-- {{weather.feelsLike}} - 体感温度 (°C)
+- {{weather.windDirection}} - 当前风向 (如: 北风, 东南风)
+- {{weather.windPower}} - 当前风力等级 (如: 3级)
+- {{weather.dayWindDirection}} - 白天风向
+- {{weather.nightWindDirection}} - 夜间风向
+- {{weather.dayWindPower}} - 白天风力等级
+- {{weather.nightWindPower}} - 夜间风力等级
 - {{weather.tempMin}} - 最低温度 (°C)
 - {{weather.tempMax}} - 最高温度 (°C)
-- {{weather.sunrise}} - 日出时间
-- {{weather.sunset}} - 日落时间
 
 ## 位置变量 (location) - 按高德地图地址层级
 - {{location.province}} - 省份 (如: 湖南省)
@@ -379,7 +233,7 @@ export class SettingTab {
 - {{location.lon}} - 经度
 
 ### 向后兼容（旧版变量）
-- {{location.region}} - 区域/省份（等同于province，建议使用province）
+- {{location.region}} - 区域/省份（等同于province）
 
 ## 其他变量
 - {{time}} - 当前时间
@@ -406,8 +260,7 @@ export class SettingTab {
 
 🌤 **天气状况**: {{weather.description}}
 🌡 **当前温度**: {{weather.temperature}}°C
-{{#if weather.feelsLike}}🤔 **体感温度**: {{weather.feelsLike}}°C
-{{/if}}💧 **相对湿度**: {{weather.humidity}}%
+💧 **相对湿度**: {{weather.humidity}}%
 🌬 **风向**: {{weather.windDirection}}
 💨 **风力**: {{weather.windPower}}
 📊 **风速**: {{weather.windSpeed}} m/s
@@ -433,7 +286,6 @@ export class SettingTab {
 |------|------|
 | 天气 | {{weather.description}} |
 | 温度 | {{weather.temperature}}°C |
-| 体感温度 | {{weather.feelsLike}}°C |
 | 湿度 | {{weather.humidity}}% |
 | 风向 | {{weather.windDirection}} |
 | 风力 | {{weather.windPower}} |

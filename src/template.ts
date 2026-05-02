@@ -128,8 +128,7 @@ export class TemplateEngine {
 {{/if}}{{#if weather.nightWeather}}🌙 **夜间天气**: {{weather.nightWeather}}
 {{/if}}
 🌡 **当前温度**: {{weather.temperature}}°C
-{{#if weather.feelsLike}}🤔 **体感温度**: {{weather.feelsLike}}°C
-{{/if}}💧 **相对湿度**: {{weather.humidity}}%
+💧 **相对湿度**: {{weather.humidity}}%
 🌬 **风向**: {{weather.windDirection}}
 💨 **风力**: {{weather.windPower}}
 📊 **风速**: {{weather.windSpeed}} m/s
@@ -166,54 +165,4 @@ export class TemplateEngine {
 `;
   }
 
-  // 获取所有可用变量说明
-  static getVariableHelp(): string {
-    return `# 模板变量说明
-
-## 天气变量 (weather)
-- {{weather.description}} - 全天天气描述 (如: 晴转多云, 全天晴朗)
-- {{weather.dayWeather}} - 白天天气
-- {{weather.nightWeather}} - 夜间天气
-- {{weather.temperature}} - 当前温度 (°C)
-- {{weather.humidity}} - 湿度 (%)
-- {{weather.windSpeed}} - 风速 (m/s)
-- {{weather.windDirection}} - 当前风向 (如: 北风, 东南风)
-- {{weather.windPower}} - 当前风力等级 (如: 3级)
-- {{weather.dayWindDirection}} - 白天风向
-- {{weather.nightWindDirection}} - 夜间风向
-- {{weather.dayWindPower}} - 白天风力等级
-- {{weather.nightWindPower}} - 夜间风力等级
-- {{weather.pressure}} - 气压 (hPa)
-- {{weather.visibility}} - 能见度 (km)
-- {{weather.feelsLike}} - 体感温度 (°C)
-- {{weather.tempMin}} - 最低温度 (°C)
-- {{weather.tempMax}} - 最高温度 (°C)
-- {{weather.sunrise}} - 日出时间
-- {{weather.sunset}} - 日落时间
-- {{weather.icon}} - 天气图标代码
-
-## 位置变量 (location) - 按高德地图地址层级
-- {{location.province}} - 省份 (如: 湖南省)
-- {{location.city}} - 城市 (如: 岳阳市)
-- {{location.district}} - 区县 (如: 华容县)
-- {{location.township}} - 乡镇/街道 (如: 章华镇)
-- {{location.street}} - 街道 (如: 人民路)
-- {{location.streetNumber}} - 门牌号 (如: 123号)
-- {{location.formatted_address}} - 标准化详细地址
-- {{location.country}} - 国家
-- {{location.lat}} - 纬度
-- {{location.lon}} - 经度
-
-### 向后兼容（旧版变量）
-- {{location.region}} - 区域/省份（等同于province）
-- {{location.ip}} - IP地址
-- {{location.timezone}} - 时区
-
-## 其他变量
-- {{time}} - 当前时间
-
-## 示例
-${TemplateEngine.getDefaultTemplate()}
-`;
-  }
 }

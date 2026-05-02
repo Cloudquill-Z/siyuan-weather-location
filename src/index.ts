@@ -98,28 +98,20 @@ function getPinyinPrefix(cityName: string): string {
 }
 
 interface PluginConfig {
-  weatherApiKey: string;
-  weatherProvider: 'openweather' | 'amap';
-  locationProvider: 'ip' | 'amap' | 'manual';
-  manualLocation: string;
-  template: string;
   amapKey: string;
+  template: string;
   favoriteCities: FavoriteCity[];
 }
 
 const DEFAULT_CONFIG: PluginConfig = {
-  weatherApiKey: '',
-  weatherProvider: 'openweather',
-  locationProvider: 'ip',
-  manualLocation: '',
+  amapKey: '',
   template: `## 今日天气与位置
 
 🌤 **天气状况**: {{weather.description}}
 {{#if weather.dayWeather}}☀️ **白天天气**: {{weather.dayWeather}}
 {{/if}}{{#if weather.nightWeather}}🌙 **夜间天气**: {{weather.nightWeather}}
 {{/if}}🌡 **当前温度**: {{weather.temperature}}°C
-{{#if weather.feelsLike}}🤔 **体感温度**: {{weather.feelsLike}}°C
-{{/if}}💧 **相对湿度**: {{weather.humidity}}%
+💧 **相对湿度**: {{weather.humidity}}%
 🌬 **风向**: {{weather.windDirection}}
 💨 **风力**: {{weather.windPower}}
 📊 **风速**: {{weather.windSpeed}} m/s
@@ -138,7 +130,6 @@ const DEFAULT_CONFIG: PluginConfig = {
 
 ⏰ **记录时间**: {{time}}
 `,
-  amapKey: '',
   favoriteCities: []
 };
 
@@ -434,37 +425,11 @@ class WeatherLocationPlugin extends Plugin {
     return `
       <div id="weather-location-settings" style="padding: 20px; max-height: 400px; overflow-y: auto;">
         <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">天气设置</h3>
+          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">高德地图设置</h3>
           <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">天气数据源</label>
-            <select id="weather-provider" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-              <option value="openweather" ${this.config.weatherProvider === 'openweather' ? 'selected' : ''}>OpenWeatherMap (国际)</option>
-              <option value="amap" ${this.config.weatherProvider === 'amap' ? 'selected' : ''}>高德地图 (中国)</option>
-            </select>
-          </div>
-          <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">天气 API Key</label>
-            <input type="text" id="weather-api-key" value="${this.config.weatherApiKey}" placeholder="请输入 API Key" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-          </div>
-        </div>
-
-        <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">位置设置</h3>
-          <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">位置获取方式</label>
-            <select id="location-provider" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-              <option value="ip" ${this.config.locationProvider === 'ip' ? 'selected' : ''}>IP定位</option>
-              <option value="amap" ${this.config.locationProvider === 'amap' ? 'selected' : ''}>高德定位</option>
-              <option value="manual" ${this.config.locationProvider === 'manual' ? 'selected' : ''}>手动设置</option>
-            </select>
-          </div>
-          <div class="setting-item" id="amap-key-item" style="margin-bottom: 12px; display: ${this.config.locationProvider === 'amap' ? 'block' : 'none'};">
             <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">高德地图 Key</label>
-            <input type="text" id="amap-key" value="${this.config.amapKey}" placeholder="使用高德服务时需要" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-          </div>
-          <div class="setting-item" id="manual-location-item" style="margin-bottom: 12px; display: ${this.config.locationProvider === 'manual' ? 'block' : 'none'};">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">手动位置</label>
-            <input type="text" id="manual-location" value="${this.config.manualLocation}" placeholder="城市名,纬度,经度 (如: 长沙,28.2,112.9)" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            <input type="text" id="amap-key" value="${this.config.amapKey}" placeholder="天气和位置均需此 Key" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            <div style="font-size: 12px; color: #999; margin-top: 4px;">前往 <a href="https://lbs.amap.com/" target="_blank">高德开放平台</a> 申请 Key</div>
           </div>
         </div>
 
@@ -551,35 +516,10 @@ class WeatherLocationPlugin extends Plugin {
     }
     (container as any)._settingsEventsBound = true;
 
-    // 天气数据源切换
-    const weatherProvider = container.querySelector('#weather-provider') as HTMLSelectElement;
-    weatherProvider?.addEventListener('change', () => {
-      this.config.weatherProvider = weatherProvider.value as any;
-    });
-
-    // 天气 API Key
-    const weatherApiKey = container.querySelector('#weather-api-key') as HTMLInputElement;
-    weatherApiKey?.addEventListener('input', () => {
-      this.config.weatherApiKey = weatherApiKey.value;
-    });
-
-    // 位置获取方式切换
-    const locationProvider = container.querySelector('#location-provider') as HTMLSelectElement;
-    locationProvider?.addEventListener('change', () => {
-      this.config.locationProvider = locationProvider.value as any;
-      this.updateLocationSettingsUI();
-    });
-
     // 高德 Key
     const amapKey = container.querySelector('#amap-key') as HTMLInputElement;
     amapKey?.addEventListener('input', () => {
       this.config.amapKey = amapKey.value;
-    });
-
-    // 手动位置
-    const manualLocation = container.querySelector('#manual-location') as HTMLInputElement;
-    manualLocation?.addEventListener('input', () => {
-      this.config.manualLocation = manualLocation.value;
     });
 
     // 模板
@@ -776,20 +716,7 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 更新位置设置 UI
-  private updateLocationSettingsUI() {
-    const amapKeyItem = document.getElementById('amap-key-item');
-    const manualLocationItem = document.getElementById('manual-location-item');
-
-    if (amapKeyItem) {
-      amapKeyItem.style.display = this.config.locationProvider === 'amap' ? 'block' : 'none';
-    }
-    if (manualLocationItem) {
-      manualLocationItem.style.display = this.config.locationProvider === 'manual' ? 'block' : 'none';
-    }
-  }
-
-  // 搜索城市（优先高德，失败时回退到 OpenStreetMap Nominatim）
+  // 搜索城市（高德地图）
   private async searchCities(query: string): Promise<CitySearchResult[]> {
     if (!query || query.length < 2) {
       return [];
@@ -799,125 +726,54 @@ class WeatherLocationPlugin extends Plugin {
 
     const amapKey = this.config.amapKey;
     if (!amapKey) {
-      console.log('[WeatherLocation] 未配置高德地图 Key，使用 Nominatim 搜索');
-      const fallbackResults = await this.searchCitiesByNominatim(query);
-      if (fallbackResults.length === 0) {
-        showMessage('未找到匹配的城市');
-      }
-      return fallbackResults;
+      throw new Error('未配置高德地图 Key，无法搜索城市');
     }
 
-    try {
-      const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(query)}&key=${amapKey}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(query)}&key=${amapKey}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(url, {
-        signal: controller.signal
-      });
+    const response = await fetch(url, {
+      signal: controller.signal
+    });
 
-      clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(`高德地图 API 请求失败: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('[WeatherLocation] 高德地图返回数据:', data);
-
-      if (data.status !== '1') {
-        throw new Error(data.info || '搜索失败');
-      }
-
-      if (!data.geocodes || data.geocodes.length === 0) {
-        showMessage('未找到匹配的城市');
-        return [];
-      }
-
-      // 转换为统一格式
-      // 使用 city 或 district 作为城市名，而不是 formatted_address（包含省份）
-      const results = data.geocodes.map((item: any) => {
-        // 判断搜索的是否为县/区级别（搜索词包含"县"、"区"、"镇"等）
-        const isCountySearch = /[县区镇乡]/.test(query);
-
-        let cityName: string;
-        if (isCountySearch && item.district) {
-          // 如果是县/区级别搜索，优先使用 district 字段
-          cityName = item.district;
-        } else {
-          // 否则按优先级：city > district > province
-          cityName = item.city || item.district || item.province || query;
-        }
-
-        // 移除末尾的"市"、"县"、"区"等，保持简洁
-        const cleanCityName = cityName.replace(/[市区县]$/, '');
-        return {
-          name: cleanCityName,
-          lat: parseFloat(item.location.split(',')[1]),
-          lon: parseFloat(item.location.split(',')[0]),
-          displayName: item.formatted_address || cityName
-        };
-      });
-
-      console.log('[WeatherLocation] 搜索结果:', results);
-      return results;
-    } catch (error) {
-      console.warn('[WeatherLocation] 高德搜索失败，回退到 Nominatim:', error);
-      const fallbackResults = await this.searchCitiesByNominatim(query);
-      if (fallbackResults.length === 0) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          showMessage('搜索超时，请重试');
-        } else if (error instanceof Error) {
-          showMessage(`搜索失败: ${error.message}`);
-        } else {
-          showMessage('搜索失败，请重试');
-        }
-      } else {
-        showMessage('已切换备用搜索服务');
-      }
-      return fallbackResults;
+    if (!response.ok) {
+      throw new Error(`高德地图 API 请求失败: ${response.status}`);
     }
-  }
 
-  private async searchCitiesByNominatim(query: string): Promise<CitySearchResult[]> {
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=8&q=${encodeURIComponent(query)}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const data = await response.json();
+    console.log('[WeatherLocation] 高德地图返回数据:', data);
 
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
+    if (data.status !== '1') {
+      throw new Error(data.info || '搜索失败');
+    }
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Nominatim 请求失败: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        return [];
-      }
-
-      return data
-        .map((item: any) => {
-          const name = String(item.display_name || query).split(',')[0].trim() || query;
-          return {
-            name: name.replace(/[市区县]$/, ''),
-            lat: parseFloat(item.lat),
-            lon: parseFloat(item.lon),
-            displayName: item.display_name || name
-          } as CitySearchResult;
-        })
-        .filter((item: CitySearchResult) => !Number.isNaN(item.lat) && !Number.isNaN(item.lon));
-    } catch (error) {
-      console.error('[WeatherLocation] Nominatim 搜索失败:', error);
+    if (!data.geocodes || data.geocodes.length === 0) {
+      showMessage('未找到匹配的城市');
       return [];
     }
+
+    const results = data.geocodes.map((item: any) => {
+      const isCountySearch = /[县区镇乡]/.test(query);
+      let cityName: string;
+      if (isCountySearch && item.district) {
+        cityName = item.district;
+      } else {
+        cityName = item.city || item.district || item.province || query;
+      }
+      const cleanCityName = cityName.replace(/[市区县]$/, '');
+      return {
+        name: cleanCityName,
+        lat: parseFloat(item.location.split(',')[1]),
+        lon: parseFloat(item.location.split(',')[0]),
+        displayName: item.formatted_address || cityName
+      };
+    });
+
+    console.log('[WeatherLocation] 搜索结果:', results);
+    return results;
   }
 
   // 渲染搜索结果
@@ -1328,14 +1184,8 @@ class WeatherLocationPlugin extends Plugin {
 - {{weather.nightWindDirection}} - 夜间风向
 - {{weather.dayWindPower}} - 白天风力等级
 - {{weather.nightWindPower}} - 夜间风力等级
-- {{weather.pressure}} - 气压 (hPa)
-- {{weather.visibility}} - 能见度 (km)
-- {{weather.feelsLike}} - 体感温度 (°C)
 - {{weather.tempMin}} - 最低温度 (°C)
 - {{weather.tempMax}} - 最高温度 (°C)
-- {{weather.sunrise}} - 日出时间
-- {{weather.sunset}} - 日落时间
-
 ## 位置变量 (location) - 按高德地图地址层级
 - {{location.province}} - 省份 (如: 湖南省)
 - {{location.city}} - 城市 (如: 岳阳市)
@@ -1347,9 +1197,6 @@ class WeatherLocationPlugin extends Plugin {
 - {{location.country}} - 国家
 - {{location.lat}} - 纬度
 - {{location.lon}} - 经度
-
-### 向后兼容（旧版变量）
-- {{location.region}} - 区域/省份（等同于province，建议使用province）
 
 ## 其他变量
 - {{time}} - 当前时间
@@ -1376,7 +1223,7 @@ class WeatherLocationPlugin extends Plugin {
     try {
       const location = await this.locationService.getCurrentLocation();
       if (!location) {
-        showMessage('无法获取位置信息。请检查：\n1. 网络连接是否正常\n2. 是否已配置位置服务\n3. 手动位置格式是否正确（城市名,纬度,经度）');
+        showMessage('无法获取位置信息。请检查：\n1. 网络连接是否正常\n2. 高德地图 Key 是否已配置\n3. 浏览器定位权限是否已开启');
         return null;
       }
       
@@ -1406,23 +1253,65 @@ class WeatherLocationPlugin extends Plugin {
       return null;
     }
 
+    // 用高德逆地理编码补全位置详细信息
+    let locationInfo = await this.reverseGeocodeCity(city);
+
     return {
       weather,
-      location: {
-        city: city.name,
-        country: '',
-        province: '',
-        district: '',
-        township: '',
-        street: '',
-        streetNumber: '',
-        formatted_address: '',
-        lat: city.lat,
-        lon: city.lon,
-        region: ''
-      },
+      location: locationInfo,
       time: new Date().toLocaleString('zh-CN')
     };
+  }
+
+  // 用高德逆地理编码反查城市坐标，获取完整地址层级
+  private async reverseGeocodeCity(city: FavoriteCity): Promise<any> {
+    const base = {
+      city: city.name,
+      country: '',
+      province: '',
+      district: '',
+      township: '',
+      street: '',
+      streetNumber: '',
+      formatted_address: '',
+      lat: city.lat,
+      lon: city.lon,
+      region: ''
+    };
+
+    if (!this.config.amapKey) {
+      return base;
+    }
+
+    try {
+      const url = `https://restapi.amap.com/v3/geocode/regeo?key=${this.config.amapKey}&location=${city.lon},${city.lat}&extensions=base`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) return base;
+
+      const data = await response.json();
+      if (data.status !== '1' || !data.regeocode) return base;
+
+      const addr = data.regeocode.addressComponent;
+      return {
+        city: addr.city || city.name,
+        country: addr.country || '',
+        province: addr.province || '',
+        district: addr.district || '',
+        township: addr.township || '',
+        street: addr.street || '',
+        streetNumber: addr.streetNumber || addr.number || '',
+        formatted_address: data.regeocode.formatted_address || '',
+        lat: city.lat,
+        lon: city.lon,
+        region: addr.province || ''
+      };
+    } catch {
+      return base;
+    }
   }
 
   // 获取位置数据

@@ -1,17 +1,16 @@
 # Weather & Location Plugin for SiYuan
 
-A SiYuan Note plugin that automatically fetches weather and location information, and inserts it into daily notes via templates.
+A SiYuan Note plugin that fetches weather and location info via Amap (高德地图) and inserts it into daily notes via customizable templates.
 
 ## Features
 
-- 🌤 **Weather Query**: Support multiple weather data sources (OpenWeatherMap, Amap)
-- 📍 **Location Query**: Support IP geolocation, browser geolocation, and manual location setting
-- 📝 **Template Support**: Customizable templates with rich variables and conditional syntax
+- 🌤 **Weather Query**: Real-time and forecast weather data via Amap
+- 📍 **Location Query**: Browser geolocation + Amap reverse geocoding for precise address
+- 📝 **Template Support**: Customizable templates with variables and conditional syntax
 - 🤖 **Auto Insert**: Automatically insert into daily notes when created
 - 🎨 **Multiple Output Formats**: Support text, table, and custom formats
 - ⚡ **Slash Commands**: Quick insert via `/tq` or `/天气位置`; per-city shortcuts for favorite cities
 - ⭐ **Favorite Cities**: Save up to 5 cities for quick weather lookup
-- 🔄 **Auto Fallback**: IP location service auto-falls back across multiple providers
 
 ## Installation
 
@@ -20,20 +19,17 @@ A SiYuan Note plugin that automatically fetches weather and location information
 
 ## Configuration
 
-### Weather Settings
+### Amap API Key
 
-1. Select a weather data provider:
-   - **OpenWeatherMap**: International, requires free API Key
-   - **Amap**: For China users, requires Amap Key
+The plugin uses Amap (高德地图) for both weather and location services. You need one API Key.
 
-2. Enter the corresponding API Key
+1. Visit [lbs.amap.com](https://lbs.amap.com/) to register and create an application
+2. Get the Web Service API Key
+3. Enter the Key in plugin settings
 
-### Location Settings
+### Location
 
-1. Select location provider:
-   - **IP Geolocation**: Automatic, no configuration needed. Falls back across multiple services (ipinfo.io → ipapi.co → ip-api.com → Sina)
-   - **Amap Geolocation**: Precise location, requires browser permission and Amap Key
-   - **Manual**: Set fixed location manually (format: `CityName,lat,lon`)
+The plugin uses browser geolocation to get your current coordinates, then calls Amap reverse geocoding API to resolve the full address (province, city, district, street, etc.). Your browser will prompt for location permission.
 
 ### Favorite Cities
 
@@ -60,13 +56,8 @@ The plugin supports custom templates using the following variables and syntax:
 - `{{weather.nightWindDirection}}` - Nighttime wind direction
 - `{{weather.dayWindPower}}` - Daytime wind power level
 - `{{weather.nightWindPower}}` - Nighttime wind power level
-- `{{weather.pressure}}` - Pressure (hPa)
-- `{{weather.visibility}}` - Visibility (km)
-- `{{weather.feelsLike}}` - Feels like temperature (°C)
 - `{{weather.tempMin}}` - Min temperature (°C)
 - `{{weather.tempMax}}` - Max temperature (°C)
-- `{{weather.sunrise}}` - Sunrise time
-- `{{weather.sunset}}` - Sunset time
 
 #### Location Variables
 - `{{location.province}}` - Province (e.g., "湖南省")
@@ -80,8 +71,6 @@ The plugin supports custom templates using the following variables and syntax:
 - `{{location.region}}` - Region/Province (legacy alias for province)
 - `{{location.lat}}` - Latitude
 - `{{location.lon}}` - Longitude
-- `{{location.ip}}` - IP address (when using IP location)
-- `{{location.timezone}}` - Timezone
 
 #### Conditional Syntax
 The template engine supports conditional blocks:
@@ -102,8 +91,7 @@ The template engine supports conditional blocks:
 {{#if weather.dayWeather}}☀️ **白天天气**: {{weather.dayWeather}}
 {{/if}}{{#if weather.nightWeather}}🌙 **夜间天气**: {{weather.nightWeather}}
 {{/if}}🌡 **当前温度**: {{weather.temperature}}°C
-{{#if weather.feelsLike}}🤔 **体感温度**: {{weather.feelsLike}}°C
-{{/if}}💧 **相对湿度**: {{weather.humidity}}%
+💧 **相对湿度**: {{weather.humidity}}%
 🌬 **风向**: {{weather.windDirection}}
 💨 **风力**: {{weather.windPower}}
 📊 **风速**: {{weather.windSpeed}} m/s
@@ -162,42 +150,30 @@ If you have favorite cities configured, use shortcuts like `/bjtq` (Beijing), `/
 
 🌤 **Weather**: {{weather.description}}
 🌡 **Temperature**: {{weather.temperature}}°C
-{{#if weather.feelsLike}}🤔 **Feels Like**: {{weather.feelsLike}}°C
+{{#if weather.dayWeather}}☀️ **Day**: {{weather.dayWeather}}
+{{/if}}{{#if weather.nightWeather}}🌙 **Night**: {{weather.nightWeather}}
 {{/if}}💧 **Humidity**: {{weather.humidity}}%
 
 📍 **Location**: {{location.city}}
 ⏰ **Time**: {{time}}
 ```
 
-## API Keys
-
-### OpenWeatherMap
-1. Visit [openweathermap.org](https://openweathermap.org/api)
-2. Sign up for a free account
-3. Get your API Key from the dashboard
-
-### Amap
-1. Visit [lbs.amap.com](https://lbs.amap.com/)
-2. Register and create an application
-3. Get the Web Service API Key
-
 ## Notes
 
 1. **API Key Security**: Keep your API keys secure and do not share them
-2. **Free Tier Limits**: Weather APIs have free daily quotas; exceeding them may incur charges
-3. **Location Accuracy**: IP geolocation provides city-level accuracy; for precise location use browser geolocation or manual settings
+2. **Free Tier Limits**: Amap weather API has free daily quotas; exceeding them may incur charges
+3. **Browser Permission**: Location feature requires browser geolocation permission
 4. **Network Required**: The plugin needs network access to fetch weather and location data
 
 ## FAQ
 
 **Q: Why can't I get weather data?**
 A: Check the following:
-- API Key is correctly configured
+- Amap API Key is correctly configured
 - Network connection is working
-- Weather service provider is available
 
 **Q: Why is the location inaccurate?**
-A: IP geolocation has limited accuracy. For more precise results, use browser geolocation (Amap) or manual location settings.
+A: The plugin uses browser geolocation. Make sure you've granted location permission. Try moving to an area with better GPS signal.
 
 **Q: How to disable auto-insert?**
 A: Disable the "Auto insert when creating daily note" option in plugin settings.
