@@ -192,24 +192,27 @@ export class TemplateEngine {
 - {{weather.sunset}} - 日落时间
 - {{weather.icon}} - 天气图标代码
 
-## 位置变量 (location)
-- {{location.city}} - 城市名称
-- {{location.country}} - 国家名称
-- {{location.region}} - 区域/省份
-- {{location.district}} - 区/县
+## 位置变量 (location) - 按高德地图地址层级
+- {{location.province}} - 省份 (如: 湖南省)
+- {{location.city}} - 城市 (如: 岳阳市)
+- {{location.district}} - 区县 (如: 华容县)
+- {{location.township}} - 乡镇/街道 (如: 章华镇)
+- {{location.street}} - 街道 (如: 人民路)
+- {{location.streetNumber}} - 门牌号 (如: 123号)
 - {{location.formatted_address}} - 标准化详细地址
+- {{location.country}} - 国家
 - {{location.lat}} - 纬度
 - {{location.lon}} - 经度
+
+### 向后兼容（旧版变量）
+- {{location.region}} - 区域/省份（等同于province）
 - {{location.ip}} - IP地址
 - {{location.timezone}} - 时区
 
 ## 其他变量
 - {{time}} - 当前时间
 
-## 条件语句
-{{#if weather.feelsLike}}内容{{/if}}
-
-## 示例模板
+## 示例
 ${TemplateEngine.getDefaultTemplate()}
 `;
   }
