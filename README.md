@@ -7,14 +7,12 @@ A SiYuan Note plugin that fetches weather and location info via Amap (高德地�
 - 🌤 **Weather Query**: Real-time and forecast weather data via Amap
 - 📍 **Location Query**: Browser geolocation + Amap reverse geocoding for precise address
 - 📝 **Template Support**: Customizable templates with variables and conditional syntax
-- 🤖 **Auto Insert**: Automatically insert into daily notes when created
-- 🎨 **Multiple Output Formats**: Support text, table, and custom formats
 - ⚡ **Slash Commands**: Quick insert via `/tq` or `/天气位置`; per-city shortcuts for favorite cities
 - ⭐ **Favorite Cities**: Save up to 5 cities for quick weather lookup
 
 ## Installation
 
-1. Download the latest release from the marketplace
+1. Download from the SiYuan marketplace (Settings → Marketplace → Plugins)
 2. Enable the plugin in Settings → Marketplace → Plugins
 
 ## Configuration
@@ -35,9 +33,11 @@ The plugin uses browser geolocation to get your current coordinates, then calls 
 
 The plugin supports saving up to 5 frequently used cities. Once added, each city gets a slash command shortcut using its pinyin prefix (e.g., `/bjtq` for Beijing, `/cstq` for Changsha).
 
-- Add cities by searching or manual coordinate entry in settings
-- Each city generates a unique slash command: `<pinyin-prefix>tq`
-- Edit or remove cities from the settings panel
+- **Add by search**: Search city names via Amap geocoding API and select from results
+- **Add manually**: Enter city name, latitude, and longitude directly
+- **Custom prefix**: Customize the pinyin shortcut prefix for each city
+- **Edit / Delete**: Update city info or remove cities from the settings panel
+- **Slash command format**: `<pinyin-prefix>tq` (e.g., `/bjtq` for Beijing)
 
 ### Template Settings
 
@@ -113,17 +113,20 @@ The template engine supports conditional blocks:
 
 ## Usage
 
-### Method 1: Auto Insert (Recommended)
-Enable "Auto insert when creating daily note" in settings. The plugin will automatically insert weather and location info when you create a new daily note.
-
-### Method 2: Slash Commands
+### Method 1: Slash Commands
 Type `/tq` or `/天气位置` in the editor to insert the weather and location template.
 If you have favorite cities configured, use shortcuts like `/bjtq` (Beijing), `/cstq` (Changsha), etc.
 
-### Method 3: Command Palette
+### Method 2: Command Palette
 - `Insert Weather Info`
 - `Insert Location Info`
 - `Insert Weather & Location Template`
+- `Open Weather & Location Settings`
+
+### Settings Panel Features
+- **Test button**: Test data fetching to verify API key and connectivity
+- **Clear cache**: Clear cached weather and location data to force fresh requests
+- **Template presets**: Quickly switch between default, simple, and table templates
 
 ## Template Examples
 
@@ -169,20 +172,24 @@ If you have favorite cities configured, use shortcuts like `/bjtq` (Beijing), `/
 
 **Q: Why can't I get weather data?**
 A: Check the following:
-- Amap API Key is correctly configured
+- Amap API Key is correctly configured in settings
 - Network connection is working
+- Use the "Test" button in settings to verify
 
 **Q: Why is the location inaccurate?**
 A: The plugin uses browser geolocation. Make sure you've granted location permission. Try moving to an area with better GPS signal.
 
-**Q: How to disable auto-insert?**
-A: Disable the "Auto insert when creating daily note" option in plugin settings.
-
 **Q: How to add a favorite city?**
-A: Open plugin settings → find "Favorite Cities" section → search for a city or manually enter coordinates.
+A: Open plugin settings → find "Favorite Cities" section. You can search for a city by name or manually enter coordinates.
+
+**Q: How many favorite cities can I save?**
+A: Up to 5 cities.
 
 **Q: What do the slash command shortcuts mean?**
-A: Each favorite city gets a pinyin-based shortcut. For example, `/bjtq` = Beijing (bj) + weather (tq). The prefix is auto-generated from the first two characters of the city name.
+A: Each favorite city gets a pinyin-based shortcut. For example, `/bjtq` = Beijing (bj) + weather (tq). The prefix is auto-generated from the city name and can be customized in settings.
+
+**Q: How do I clear cached data?**
+A: Click "Clear cache" in the settings panel. This forces the plugin to fetch fresh weather and location data on the next request.
 
 ## Development
 

@@ -1468,10 +1468,10 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 替换块内容（用于斜杠命令原地替换）
+  // 替换块内容（用于斜杠命令，使用 insertBlock 安全处理多块 Markdown）
   private async replaceBlockContent(blockId: string, content: string) {
     try {
-      await this.updateBlock(blockId, content);
+      await this.insertBlockAfter(blockId, content);
       showMessage('天气位置已插入');
     } catch (error) {
       showMessage('插入内容失败');
@@ -1499,9 +1499,9 @@ class WeatherLocationPlugin extends Plugin {
     return response.json();
   }
 
-  // 使用思源API更新块内容
-  private async updateBlock(blockId: string, content: string) {
-    const response = await fetch('/api/block/updateBlock', {
+  // 在指定块后插入多块 Markdown（安全处理标题、空行等多块内容）
+  private async insertBlockAfter(blockId: string, content: string) {
+    const response = await fetch('/api/block/insertBlock', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1509,7 +1509,7 @@ class WeatherLocationPlugin extends Plugin {
       body: JSON.stringify({
         dataType: 'markdown',
         data: content,
-        id: blockId
+        previousID: blockId
       })
     });
 
