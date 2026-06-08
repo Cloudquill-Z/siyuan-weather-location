@@ -6,20 +6,30 @@ import { SettingTab } from './setting';
 
 const STORAGE_NAME = 'weather-location-config';
 const MAX_FAVORITE_CITIES = 5;
+const AMAP_KEY_MASK = '********';
+const DEFAULT_TEMPLATE_ID = 'default-template';
 
 interface FavoriteCity {
   name: string;
   lat: number;
   lon: number;
-  pinyinPrefix: string; // 城市名首字母缩写，如"北京"->"bj"
+  pinyinPrefix: string; // 地点名首字母缩写，如"北京"->"bj"
+  address?: string;
 }
 
-// 城市搜索结果接口
+// 地点搜索结果接口
 interface CitySearchResult {
   name: string;
   lat: number;
   lon: number;
   displayName: string;
+  address: string;
+}
+
+interface SavedTemplate {
+  id: string;
+  name: string;
+  content: string;
 }
 
 // 常用汉字拼音首字母映射表（基于实际拼音，处理多音字）
@@ -101,6 +111,8 @@ interface PluginConfig {
   amapKey: string;
   template: string;
   favoriteCities: FavoriteCity[];
+  templates: SavedTemplate[];
+  activeTemplateId: string;
 }
 
 const DEFAULT_CONFIG: PluginConfig = {
@@ -130,7 +142,9 @@ const DEFAULT_CONFIG: PluginConfig = {
 
 ⏰ **记录时间**: {{time}}
 `,
-  favoriteCities: []
+  favoriteCities: [],
+  templates: [],
+  activeTemplateId: DEFAULT_TEMPLATE_ID
 };
 
 class WeatherLocationPlugin extends Plugin {
@@ -165,8 +179,6 @@ class WeatherLocationPlugin extends Plugin {
       // 预加载位置和天气数据（后台异步执行）
       this.prefetchData();
       
-      // 显示加载提示
-      showMessage('天气位置插件已加载');
       console.log('[WeatherLocation] Plugin loaded successfully');
     } catch (error) {
       console.error('[WeatherLocation] Error loading plugin:', error);
@@ -181,11 +193,68 @@ class WeatherLocationPlugin extends Plugin {
   private async loadConfig() {
     try {
       const stored = await this.loadData(STORAGE_NAME);
-      this.config = { ...DEFAULT_CONFIG, ...stored };
+      this.config = this.normalizeConfig(stored);
     } catch (error) {
       console.error('[WeatherLocation] Error loading config:', error);
-      this.config = DEFAULT_CONFIG;
+      this.config = this.normalizeConfig({});
     }
+  }
+
+  private normalizeConfig(stored: Partial<PluginConfig> | null | undefined): PluginConfig {
+    const config = { ...DEFAULT_CONFIG, ...(stored || {}) };
+    const savedTemplates = Array.isArray(config.templates) ? config.templates : [];
+    const defaultTemplate: SavedTemplate = {
+      id: DEFAULT_TEMPLATE_ID,
+      name: '默认模板',
+      content: DEFAULT_CONFIG.template
+    };
+    const customTemplates = savedTemplates
+      .filter(template => template && template.id !== DEFAULT_TEMPLATE_ID)
+      .map((template, index) => ({
+        id: template.id || `custom-template-${Date.now()}-${index}`,
+        name: template.name || `模板${this.getTemplateNumberName(index + 1)}`,
+        content: template.content || ''
+      }));
+
+    config.templates = [defaultTemplate, ...customTemplates];
+
+    const activeTemplate = config.templates.find(template => template.id === config.activeTemplateId);
+    if (!activeTemplate) {
+      const matchingTemplate = config.templates.find(template => template.content === config.template);
+      config.activeTemplateId = matchingTemplate?.id || DEFAULT_TEMPLATE_ID;
+    }
+
+    if (!config.template) {
+      config.template = config.templates.find(template => template.id === config.activeTemplateId)?.content || DEFAULT_CONFIG.template;
+    }
+
+    return config;
+  }
+
+  private getTemplateNumberName(index: number): string {
+    const chineseNumbers = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    return chineseNumbers[index - 1] || String(index);
+  }
+
+  private maskAmapKey(key: string): string {
+    if (!key) return '';
+    if (key.length <= 8) {
+      return `${key.slice(0, 2)}${AMAP_KEY_MASK}${key.slice(-2)}`;
+    }
+    return `${key.slice(0, 4)}${AMAP_KEY_MASK}${key.slice(-4)}`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private escapeAttribute(value: string): string {
+    return this.escapeHtml(value);
   }
 
   async saveConfig() {
@@ -222,7 +291,7 @@ class WeatherLocationPlugin extends Plugin {
             const data = await this.getTemplateData();
             if (!data) return;
             const content = this.templateEngine.render(this.config.template, data);
-            this.replaceBlockContent(nodeElement.dataset.nodeId || '', content);
+            this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气']);
           }
         }];
     
@@ -238,13 +307,13 @@ class WeatherLocationPlugin extends Plugin {
       
       baseCommands.push({
         filter: filters,
-        html: `<span class="b3-list-item__text">🌤 ${city.name}天气${pinyinPrefix ? ` (${pinyinPrefix}tq)` : ''}</span>`,
+        html: `<span class="b3-list-item__text">🌤 ${this.escapeHtml(city.name)}天气${pinyinPrefix ? ` (${this.escapeHtml(pinyinPrefix)}tq)` : ''}</span>`,
         id: `insert-favorite-city-weather-${index}`,
         callback: async (protyle: any, nodeElement: HTMLElement) => {
           const data = await this.getTemplateDataForCity(city);
           if (!data) return;
           const content = this.templateEngine.render(this.config.template, data);
-          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content);
+          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, filters);
         }
       });
     });
@@ -348,7 +417,7 @@ class WeatherLocationPlugin extends Plugin {
           const data = await this.getTemplateData();
           if (!data) return;
           const content = this.templateEngine.render(this.config.template, data);
-          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content);
+          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气']);
         }
       }
     ];
@@ -367,13 +436,13 @@ class WeatherLocationPlugin extends Plugin {
       
       slashCommands.push({
         filter: filters,
-        html: `<span class="b3-list-item__text">🌤 ${city.name}天气${pinyinPrefix ? ` (${pinyinPrefix}tq)` : ''}</span>`,
+        html: `<span class="b3-list-item__text">🌤 ${this.escapeHtml(city.name)}天气${pinyinPrefix ? ` (${this.escapeHtml(pinyinPrefix)}tq)` : ''}</span>`,
         id: `insert-favorite-city-weather-${index}`,
         callback: async (protyle: any, nodeElement: HTMLElement) => {
           const data = await this.getTemplateDataForCity(city);
           if (!data) return;
           const content = this.templateEngine.render(this.config.template, data);
-          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content);
+          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, filters);
         }
       });
       
@@ -422,19 +491,21 @@ class WeatherLocationPlugin extends Plugin {
 
   // 创建设置内容
   private createSettingsContent(): string {
+    const maskedAmapKey = this.maskAmapKey(this.config.amapKey);
+    const escapedTemplate = this.escapeHtml(this.config.template);
     return `
       <div id="weather-location-settings" style="padding: 20px; max-height: 400px; overflow-y: auto;">
         <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
           <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">高德地图设置</h3>
           <div class="setting-item" style="margin-bottom: 12px;">
             <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">高德地图 Key</label>
-            <input type="text" id="amap-key" value="${this.config.amapKey}" placeholder="天气和位置均需此 Key" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-            <div style="font-size: 12px; color: #999; margin-top: 4px;">前往 <a href="https://lbs.amap.com/" target="_blank">高德开放平台</a> 申请 Key</div>
+            <input type="text" id="amap-key" value="${this.escapeAttribute(maskedAmapKey)}" data-original-key="${this.escapeAttribute(this.config.amapKey)}" placeholder="天气和位置均需此 Key" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            <div style="font-size: 12px; color: #999; margin-top: 4px;">已保存的 Key 会脱敏显示。需要修改时，直接输入新的完整 Key。前往 <a href="https://lbs.amap.com/" target="_blank">高德开放平台</a> 申请 Key</div>
           </div>
         </div>
 
         <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">常用城市 <span style="font-size: 12px; font-weight: normal; color: #999;">(最多5个)</span></h3>
+          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">常用地点 <span style="font-size: 12px; font-weight: normal; color: #999;">(最多5个)</span></h3>
           
           <!-- 添加方式切换 -->
           <div class="setting-item" id="favorite-city-search-container" style="margin-bottom: 12px; display: ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? 'none' : 'block'};">
@@ -445,18 +516,18 @@ class WeatherLocationPlugin extends Plugin {
             
             <!-- 搜索模式 -->
             <div id="search-city-panel">
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">搜索城市</label>
+              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">搜索地点</label>
               <div style="position: relative;">
-                <input type="text" id="favorite-city-search" placeholder="输入城市名称搜索（如：北京、东京、纽约）" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+                <input type="text" id="favorite-city-search" placeholder="输入城市、区县、街道或小区（如：北京、华容县、人民路、某小区）" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
                 <div id="city-search-results" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none;"></div>
               </div>
-              <div style="font-size: 12px; color: #999; margin-top: 5px;">支持全球城市搜索，输入后自动显示匹配结果</div>
+              <div style="font-size: 12px; color: #999; margin-top: 5px;">支持高德地点搜索，城市、区县、街道和具体小区都可以添加</div>
             </div>
             
             <!-- 手动录入模式 -->
             <div id="manual-city-panel" style="display: none;">
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">城市名称</label>
-              <input type="text" id="manual-city-name" placeholder="如：北京、长沙" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;">
+              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">地点名称</label>
+              <input type="text" id="manual-city-name" placeholder="如：北京、华容县、人民路、某小区" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;">
               
               <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">纬度</label>
               <input type="text" id="manual-city-lat" placeholder="如：39.9042" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;">
@@ -467,12 +538,12 @@ class WeatherLocationPlugin extends Plugin {
               <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">快捷指令（可选，如：bj）</label>
               <input type="text" id="manual-city-prefix" placeholder="留空则自动生成" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 10px;">
               
-              <button id="add-manual-city-btn" style="padding: 8px 16px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer; font-size: 14px; width: 100%;">添加城市</button>
-              <div style="font-size: 12px; color: #999; margin-top: 5px;">格式：城市名,纬度,经度。可在地图软件中查询坐标</div>
+              <button id="add-manual-city-btn" style="padding: 8px 16px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer; font-size: 14px; width: 100%;">添加地点</button>
+              <div style="font-size: 12px; color: #999; margin-top: 5px;">格式：地点名,纬度,经度。可在地图软件中查询坐标</div>
             </div>
           </div>
           
-          ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? '<div style="color: #ff4d4f; font-size: 13px; margin-bottom: 10px;">已达到最大数量限制（5个），如需添加请先删除现有城市</div>' : ''}
+          ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? '<div style="color: #ff4d4f; font-size: 13px; margin-bottom: 10px;">已达到最大数量限制（5个），如需添加请先删除现有地点</div>' : ''}
           <div id="favorite-cities-list" style="max-height: 200px; overflow-y: auto;">
             ${this.renderFavoriteCitiesList()}
           </div>
@@ -481,13 +552,17 @@ class WeatherLocationPlugin extends Plugin {
         <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
           <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">模板设置</h3>
           <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">自定义模板</label>
-            <textarea id="template" rows="6" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; font-family: monospace;">${this.config.template}</textarea>
+            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">已保存模板</label>
+            <select id="template-select" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+              ${this.renderTemplateOptions()}
+            </select>
           </div>
           <div class="setting-item" style="margin-bottom: 12px;">
-            <button id="default-template-btn" style="padding: 6px 12px; margin-right: 8px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">默认模板</button>
-            <button id="simple-template-btn" style="padding: 6px 12px; margin-right: 8px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">简洁模板</button>
-            <button id="table-template-btn" style="padding: 6px 12px; margin-right: 8px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">表格模板</button>
+            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">当前模板内容</label>
+            <textarea id="template" rows="8" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; font-family: monospace;">${escapedTemplate}</textarea>
+          </div>
+          <div class="setting-item" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+            <button id="save-template-btn" style="padding: 6px 12px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer;">保存模板</button>
             <button id="help-btn" style="padding: 6px 12px; border: none; background: transparent; color: #1890ff; cursor: pointer;">查看变量说明</button>
           </div>
         </div>
@@ -499,6 +574,34 @@ class WeatherLocationPlugin extends Plugin {
         </div>
       </div>
     `;
+  }
+
+  private renderTemplateOptions(): string {
+    return this.config.templates.map(template => {
+      const selected = template.id === this.config.activeTemplateId ? ' selected' : '';
+      return `<option value="${this.escapeAttribute(template.id)}"${selected}>${this.escapeHtml(template.name)}</option>`;
+    }).join('');
+  }
+
+  private saveCurrentTemplate(): SavedTemplate {
+    const content = this.config.template;
+    const activeTemplate = this.config.templates.find(template => template.id === this.config.activeTemplateId);
+
+    if (activeTemplate && activeTemplate.id !== DEFAULT_TEMPLATE_ID) {
+      activeTemplate.content = content;
+      return activeTemplate;
+    }
+
+    const customCount = this.config.templates.filter(template => template.id !== DEFAULT_TEMPLATE_ID).length + 1;
+    const savedTemplate: SavedTemplate = {
+      id: `custom-template-${Date.now()}`,
+      name: `模板${this.getTemplateNumberName(customCount)}`,
+      content
+    };
+
+    this.config.templates.push(savedTemplate);
+    this.config.activeTemplateId = savedTemplate.id;
+    return savedTemplate;
   }
 
   // 绑定设置事件
@@ -518,41 +621,49 @@ class WeatherLocationPlugin extends Plugin {
 
     // 高德 Key
     const amapKey = container.querySelector('#amap-key') as HTMLInputElement;
+    const originalAmapKey = amapKey?.dataset.originalKey || '';
+    amapKey?.addEventListener('focus', () => {
+      if (amapKey.value === this.maskAmapKey(originalAmapKey)) {
+        amapKey.value = '';
+      }
+    });
+    amapKey?.addEventListener('blur', () => {
+      if (!amapKey.value && originalAmapKey) {
+        amapKey.value = this.maskAmapKey(originalAmapKey);
+      }
+    });
     amapKey?.addEventListener('input', () => {
-      this.config.amapKey = amapKey.value;
+      if (amapKey.value.includes(AMAP_KEY_MASK)) {
+        return;
+      }
+      this.config.amapKey = amapKey.value.trim();
     });
 
     // 模板
     const template = container.querySelector('#template') as HTMLTextAreaElement;
+    const templateSelect = container.querySelector('#template-select') as HTMLSelectElement;
     template?.addEventListener('input', () => {
       this.config.template = template.value;
     });
 
-    // 默认模板按钮
-    const defaultTemplateBtn = container.querySelector('#default-template-btn') as HTMLButtonElement;
-    defaultTemplateBtn?.addEventListener('click', () => {
-      this.config.template = DEFAULT_CONFIG.template;
-      template.value = this.config.template;
+    templateSelect?.addEventListener('change', () => {
+      const selectedTemplate = this.config.templates.find(item => item.id === templateSelect.value);
+      if (!selectedTemplate) {
+        return;
+      }
+      this.config.activeTemplateId = selectedTemplate.id;
+      this.config.template = selectedTemplate.content;
+      template.value = selectedTemplate.content;
     });
 
-    // 简洁模板按钮
-    const simpleTemplateBtn = container.querySelector('#simple-template-btn') as HTMLButtonElement;
-    simpleTemplateBtn?.addEventListener('click', () => {
-      this.config.template = `🌤 **天气**: {{weather.description}}
-🌡 **温度**: {{weather.temperature}}°C
-📍 **位置**: {{location.city}}`;
-      template.value = this.config.template;
-    });
-
-    // 表格模板按钮
-    const tableTemplateBtn = container.querySelector('#table-template-btn') as HTMLButtonElement;
-    tableTemplateBtn?.addEventListener('click', () => {
-      this.config.template = `| 项目 | 数值 |
-|------|------|
-| 天气 | {{weather.description}} |
-| 温度 | {{weather.temperature}}°C |
-| 位置 | {{location.city}} |`;
-      template.value = this.config.template;
+    const saveTemplateBtn = container.querySelector('#save-template-btn') as HTMLButtonElement;
+    saveTemplateBtn?.addEventListener('click', async () => {
+      this.config.template = template.value;
+      const savedTemplate = this.saveCurrentTemplate();
+      templateSelect.innerHTML = this.renderTemplateOptions();
+      templateSelect.value = savedTemplate.id;
+      await this.saveConfig();
+      showMessage(`${savedTemplate.name} 已保存`);
     });
 
     // 帮助按钮
@@ -564,6 +675,10 @@ class WeatherLocationPlugin extends Plugin {
     // 保存按钮
     const saveBtn = container.querySelector('#save-btn') as HTMLButtonElement;
     saveBtn?.addEventListener('click', async () => {
+      if (amapKey && !amapKey.value.includes(AMAP_KEY_MASK)) {
+        this.config.amapKey = amapKey.value.trim();
+      }
+      this.config.template = template.value;
       await this.saveConfig();
       showMessage('设置已保存');
       dialog.destroy();
@@ -639,7 +754,7 @@ class WeatherLocationPlugin extends Plugin {
           searchResults.innerHTML = this.renderSearchResults(currentResults);
           searchResults.style.display = 'block';
         } else {
-          searchResults.innerHTML = '<div style="padding: 10px; color: #999; font-size: 14px;">未找到匹配的城市，请尝试其他关键词</div>';
+          searchResults.innerHTML = '<div style="padding: 10px; color: #999; font-size: 14px;">未找到匹配的地点，请尝试其他关键词</div>';
           searchResults.style.display = 'block';
         }
       }, 500);
@@ -716,17 +831,17 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 搜索城市（高德地图）
+  // 搜索地点（高德地图）
   private async searchCities(query: string): Promise<CitySearchResult[]> {
     if (!query || query.length < 2) {
       return [];
     }
 
-    console.log('[WeatherLocation] 开始搜索城市:', query);
+    console.log('[WeatherLocation] 开始搜索地点:', query);
 
     const amapKey = this.config.amapKey;
     if (!amapKey) {
-      throw new Error('未配置高德地图 Key，无法搜索城市');
+      throw new Error('未配置高德地图 Key，无法搜索地点');
     }
 
     const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(query)}&key=${amapKey}`;
@@ -751,25 +866,32 @@ class WeatherLocationPlugin extends Plugin {
     }
 
     if (!data.geocodes || data.geocodes.length === 0) {
-      showMessage('未找到匹配的城市');
+      showMessage('未找到匹配的地点');
       return [];
     }
 
+    const seen = new Set<string>();
     const results = data.geocodes.map((item: any) => {
-      const isCountySearch = /[县区镇乡]/.test(query);
-      let cityName: string;
-      if (isCountySearch && item.district) {
-        cityName = item.district;
-      } else {
-        cityName = item.city || item.district || item.province || query;
-      }
-      const cleanCityName = cityName.replace(/[市区县]$/, '');
+      const displayName = item.formatted_address || item.district || item.city || item.province || query;
+      const locationName = displayName || query;
+      const [lonText, latText] = String(item.location || '').split(',');
       return {
-        name: cleanCityName,
-        lat: parseFloat(item.location.split(',')[1]),
-        lon: parseFloat(item.location.split(',')[0]),
-        displayName: item.formatted_address || cityName
+        name: locationName,
+        lat: parseFloat(latText),
+        lon: parseFloat(lonText),
+        displayName,
+        address: displayName
       };
+    }).filter((item: CitySearchResult) => {
+      if (!item.name || Number.isNaN(item.lat) || Number.isNaN(item.lon)) {
+        return false;
+      }
+      const key = `${item.name}-${item.lat.toFixed(6)}-${item.lon.toFixed(6)}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
     });
 
     console.log('[WeatherLocation] 搜索结果:', results);
@@ -779,21 +901,21 @@ class WeatherLocationPlugin extends Plugin {
   // 渲染搜索结果
   private renderSearchResults(results: CitySearchResult[]): string {
     if (results.length === 0) {
-      return '<div style="padding: 10px; color: #999; font-size: 14px;">未找到匹配的城市</div>';
+      return '<div style="padding: 10px; color: #999; font-size: 14px;">未找到匹配的地点</div>';
     }
 
     return results.map((city, index) => `
       <div class="city-search-result" data-index="${index}" style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 14px;">
-        <div style="font-weight: 500;">${city.name}</div>
-        <div style="font-size: 12px; color: #999; margin-top: 2px;">${city.displayName}</div>
+        <div style="font-weight: 500;">${this.escapeHtml(city.name)}</div>
+        <div style="font-size: 12px; color: #999; margin-top: 2px;">${this.escapeHtml(city.displayName)}</div>
       </div>
     `).join('');
   }
 
-  // 渲染常用城市列表
+  // 渲染常用地点列表
   private renderFavoriteCitiesList(): string {
     if (this.config.favoriteCities.length === 0) {
-      return '<div style="color: #999; font-size: 14px; padding: 10px; text-align: center;">暂无常用城市</div>';
+      return '<div style="color: #999; font-size: 14px; padding: 10px; text-align: center;">暂无常用地点</div>';
     }
 
     return this.config.favoriteCities.map((city, index) => {
@@ -802,7 +924,7 @@ class WeatherLocationPlugin extends Plugin {
       return `
       <div class="favorite-city-item" data-index="${index}" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 6px; background: #f5f5f5; border-radius: 4px;">
         <div style="flex: 1;">
-          <div style="font-size: 14px; font-weight: 500;">${city.name}</div>
+          <div style="font-size: 14px; font-weight: 500;">${this.escapeHtml(city.name)}</div>
           <div style="font-size: 12px; color: #666; margin-top: 2px;">
             坐标: ${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}
             ${pinyinPrefix ? `| 快捷指令: /${pinyinPrefix}tq` : ''}
@@ -816,99 +938,101 @@ class WeatherLocationPlugin extends Plugin {
     `}).join('');
   }
 
-  // 添加常用城市
+  // 添加常用地点
   private addFavoriteCity(city: CitySearchResult): boolean {
     // 检查是否已达到最大数量
     if (this.config.favoriteCities.length >= MAX_FAVORITE_CITIES) {
-      showMessage(`最多只能添加 ${MAX_FAVORITE_CITIES} 个常用城市`);
+      showMessage(`最多只能添加 ${MAX_FAVORITE_CITIES} 个常用地点`);
       return false;
     }
 
     if (!city || !city.name) {
-      showMessage('请选择城市');
+      showMessage('请选择地点');
       return false;
     }
 
     // 检查是否已存在
     const exists = this.config.favoriteCities.some(c => c.name === city.name);
     if (exists) {
-      showMessage('该城市已存在');
+      showMessage('该地点已存在');
       return false;
     }
 
     // 生成拼音首字母
     const pinyinPrefix = getPinyinPrefix(city.name);
-    console.log(`[WeatherLocation] 城市 ${city.name} 的首字母: ${pinyinPrefix}`);
+    console.log(`[WeatherLocation] 地点 ${city.name} 的首字母: ${pinyinPrefix}`);
 
     this.config.favoriteCities.push({
       name: city.name,
       lat: city.lat,
       lon: city.lon,
-      pinyinPrefix: pinyinPrefix
+      pinyinPrefix: pinyinPrefix,
+      address: city.address || city.displayName || city.name
     });
     return true;
   }
 
-  // 删除常用城市
+  // 删除常用地点
   private removeFavoriteCity(index: number) {
     if (index >= 0 && index < this.config.favoriteCities.length) {
       this.config.favoriteCities.splice(index, 1);
     }
   }
 
-  // 手动录入城市
+  // 手动录入地点
   private addManualCity(name: string, lat: number, lon: number, customPrefix?: string): boolean {
     // 检查是否已达到最大数量
     if (this.config.favoriteCities.length >= MAX_FAVORITE_CITIES) {
-      showMessage(`最多只能添加 ${MAX_FAVORITE_CITIES} 个常用城市`);
+      showMessage(`最多只能添加 ${MAX_FAVORITE_CITIES} 个常用地点`);
       return false;
     }
 
     if (!name || Number.isNaN(lat) || Number.isNaN(lon)) {
-      showMessage('请填写完整的城市信息');
+      showMessage('请填写完整的地点信息');
       return false;
     }
 
     // 检查是否已存在
     const exists = this.config.favoriteCities.some(c => c.name === name);
     if (exists) {
-      showMessage('该城市已存在');
+      showMessage('该地点已存在');
       return false;
     }
 
     // 使用自定义前缀或自动生成
     const pinyinPrefix = customPrefix?.trim() || getPinyinPrefix(name);
-    console.log(`[WeatherLocation] 手动添加城市 ${name} 的首字母: ${pinyinPrefix}`);
+    console.log(`[WeatherLocation] 手动添加地点 ${name} 的首字母: ${pinyinPrefix}`);
 
     this.config.favoriteCities.push({
       name: name.trim(),
       lat: lat,
       lon: lon,
-      pinyinPrefix: pinyinPrefix
+      pinyinPrefix: pinyinPrefix,
+      address: name.trim()
     });
     
     return true;
   }
 
-  // 编辑常用城市
+  // 编辑常用地点
   private editFavoriteCity(index: number, updates: Partial<FavoriteCity>): boolean {
     if (index < 0 || index >= this.config.favoriteCities.length) {
-      showMessage('城市索引无效');
+      showMessage('地点索引无效');
       return false;
     }
 
     const city = this.config.favoriteCities[index];
     
-    // 检查名称是否与其他城市重复
+    // 检查名称是否与其他地点重复
     if (updates.name && updates.name !== city.name) {
       const exists = this.config.favoriteCities.some((c, i) => i !== index && c.name === updates.name);
       if (exists) {
-        showMessage('该城市名称已存在');
+        showMessage('该地点名称已存在');
         return false;
       }
     }
 
-    // 更新城市信息
+    // 更新地点信息
     const updatedCity: FavoriteCity = {
       ...city,
       ...updates,
@@ -922,22 +1046,22 @@ class WeatherLocationPlugin extends Plugin {
     
     this.config.favoriteCities[index] = updatedCity;
 
-    console.log(`[WeatherLocation] 更新城市 ${index}:`, this.config.favoriteCities[index]);
+    console.log(`[WeatherLocation] 更新地点 ${index}:`, this.config.favoriteCities[index]);
     return true;
   }
 
-  // 显示编辑城市对话框
+  // 显示编辑地点对话框
   private showEditCityDialog(index: number) {
     const city = this.config.favoriteCities[index];
     if (!city) return;
 
     const dialog = new Dialog({
-      title: `编辑城市 - ${city.name}`,
+      title: `编辑地点 - ${this.escapeHtml(city.name)}`,
       content: `
         <div id="edit-city-dialog" style="padding: 20px; min-width: 300px;">
           <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">城市名称</label>
-            <input type="text" id="edit-city-name" value="${city.name}" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">地点名称</label>
+            <input type="text" id="edit-city-name" value="${this.escapeAttribute(city.name)}" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">纬度</label>
@@ -949,7 +1073,7 @@ class WeatherLocationPlugin extends Plugin {
           </div>
           <div style="margin-bottom: 20px;">
             <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">快捷指令前缀（如：bj）</label>
-            <input type="text" id="edit-city-prefix" value="${city.pinyinPrefix || ''}" placeholder="留空则自动生成" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            <input type="text" id="edit-city-prefix" value="${this.escapeAttribute(city.pinyinPrefix || '')}" placeholder="留空则自动生成" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
             <div style="font-size: 12px; color: #999; margin-top: 4px;">完整指令格式：前缀+tq（如：bjtq）</div>
           </div>
           <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -985,7 +1109,7 @@ class WeatherLocationPlugin extends Plugin {
         const prefix = prefixInput.value.trim();
 
         if (!name || isNaN(lat) || isNaN(lon)) {
-          showMessage('请填写完整的城市信息');
+          showMessage('请填写完整的地点信息');
           return;
         }
 
@@ -998,13 +1122,13 @@ class WeatherLocationPlugin extends Plugin {
           await this.saveConfig();
           this.updateFavoriteCitiesUI();
           dialog.destroy();
-          showMessage('城市信息已更新');
+          showMessage('地点信息已更新');
         }
       });
     }, 100);
   }
 
-  // 更新常用城市列表显示
+  // 更新常用地点列表显示
   private updateFavoriteCitiesList() {
     const listContainer = document.getElementById('favorite-cities-list');
     if (listContainer) {
@@ -1013,14 +1137,14 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 绑定常用城市事件（使用事件委托，避免重复绑定）
+  // 绑定常用地点事件（使用事件委托，避免重复绑定）
   private bindFavoriteCitiesEvents() {
     const container = document.getElementById('weather-location-settings');
     if (!container) return;
 
     // 检查是否已经绑定过事件（通过自定义属性标记）
     if ((container as any)._favoriteEventsBound) {
-      console.log('[WeatherLocation] 常用城市事件已绑定，跳过');
+      console.log('[WeatherLocation] 常用地点事件已绑定，跳过');
       return;
     }
     (container as any)._favoriteEventsBound = true;
@@ -1036,7 +1160,7 @@ class WeatherLocationPlugin extends Plugin {
         this.removeFavoriteCity(index);
         await this.saveConfig();
         this.updateFavoriteCitiesUI();
-        showMessage('城市已删除');
+        showMessage('地点已删除');
         return;
       }
       
@@ -1093,7 +1217,7 @@ class WeatherLocationPlugin extends Plugin {
     });
   }
 
-  // 绑定手动录入城市事件
+  // 绑定手动录入地点事件
   private bindManualCityEvents() {
     const container = document.getElementById('weather-location-settings');
     if (!container) return;
@@ -1119,7 +1243,7 @@ class WeatherLocationPlugin extends Plugin {
       const prefix = prefixInput.value.trim();
 
       if (!name) {
-        showMessage('请输入城市名称');
+        showMessage('请输入地点名称');
         return;
       }
 
@@ -1131,7 +1255,7 @@ class WeatherLocationPlugin extends Plugin {
       if (this.addManualCity(name, lat, lon, prefix)) {
         await this.saveConfig();
         this.updateFavoriteCitiesUI();
-        showMessage(`已添加城市：${name}`);
+        showMessage(`已添加地点：${name}`);
         
         // 清空输入框
         nameInput.value = '';
@@ -1253,19 +1377,17 @@ class WeatherLocationPlugin extends Plugin {
       return null;
     }
 
-    // 用高德逆地理编码补全位置详细信息
-    let locationInfo = await this.reverseGeocodeCity(city);
-
     return {
       weather,
-      location: locationInfo,
+      location: this.getSavedLocationInfo(city),
       time: new Date().toLocaleString('zh-CN')
     };
   }
 
-  // 用高德逆地理编码反查城市坐标，获取完整地址层级
-  private async reverseGeocodeCity(city: FavoriteCity): Promise<any> {
-    const base = {
+  // 常用地点直接使用设置中保存的信息，不再用高德反查覆盖具体地址。
+  private getSavedLocationInfo(city: FavoriteCity): any {
+    const savedAddress = city.address || city.name;
+    return {
       city: city.name,
       country: '',
       province: '',
@@ -1273,45 +1395,11 @@ class WeatherLocationPlugin extends Plugin {
       township: '',
       street: '',
       streetNumber: '',
-      formatted_address: '',
+      formatted_address: savedAddress,
       lat: city.lat,
       lon: city.lon,
       region: ''
     };
-
-    if (!this.config.amapKey) {
-      return base;
-    }
-
-    try {
-      const url = `https://restapi.amap.com/v3/geocode/regeo?key=${this.config.amapKey}&location=${city.lon},${city.lat}&extensions=base`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) return base;
-
-      const data = await response.json();
-      if (data.status !== '1' || !data.regeocode) return base;
-
-      const addr = data.regeocode.addressComponent;
-      return {
-        city: addr.city || city.name,
-        country: addr.country || '',
-        province: addr.province || '',
-        district: addr.district || '',
-        township: addr.township || '',
-        street: addr.street || '',
-        streetNumber: addr.streetNumber || addr.number || '',
-        formatted_address: data.regeocode.formatted_address || '',
-        lat: city.lat,
-        lon: city.lon,
-        region: addr.province || ''
-      };
-    } catch {
-      return base;
-    }
   }
 
   // 获取位置数据
@@ -1468,14 +1556,76 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 替换块内容（用于斜杠命令，使用 insertBlock 安全处理多块 Markdown）
-  private async replaceBlockContent(blockId: string, content: string) {
+  // 插入斜杠命令内容：保留触发词前面的行内容，只移除 /tq 等触发词。
+  private async replaceBlockContent(blockId: string, content: string, triggers: string[] = []) {
     try {
-      await this.insertBlockAfter(blockId, content);
+      const currentMarkdown = await this.getBlockMarkdown(blockId);
+      const keptMarkdown = this.removeSlashTrigger(currentMarkdown, triggers);
+      const nextContent = keptMarkdown ? `${keptMarkdown} ${content}` : content;
+      await this.updateBlock(blockId, nextContent);
       showMessage('天气位置已插入');
     } catch (error) {
       showMessage('插入内容失败');
     }
+  }
+
+  private removeSlashTrigger(markdown: string, triggers: string[]): string {
+    let result = this.removeBlockIAL(markdown)
+      .trim()
+      .replace(/\\\//g, '/')
+      .replace(/／/g, '/');
+    const candidates = Array.from(new Set(
+      triggers.flatMap(trigger => {
+        const normalized = trigger.trim();
+        if (!normalized) return [];
+        const withoutSlash = normalized.replace(/^\//, '');
+        return [
+          normalized,
+          withoutSlash,
+          `/${withoutSlash}`,
+          `、${withoutSlash}`
+        ];
+      })
+    )).sort((a, b) => b.length - a.length);
+
+    for (const candidate of candidates) {
+      if (result.endsWith(candidate)) {
+        result = result.slice(0, -candidate.length);
+        break;
+      }
+    }
+
+    result = result
+      .replace(/[\u200b-\u200d\ufeff]+$/g, '')
+      .replace(/[ \t\u00a0]+$/g, '')
+      .replace(/[、,，/]\s*(tq|天气位置|天气)\s*$/i, '')
+      .replace(/\b(tq|tianqi\s+weizhi|weather\s+location)\s*$/i, '');
+
+    return result.replace(/[ \t\u00a0]+$/g, '').trim();
+  }
+
+  private removeBlockIAL(markdown: string): string {
+    return markdown
+      .split('\n')
+      .filter(line => !/^\s*\{:\s+.*\}\s*$/.test(line))
+      .join('\n');
+  }
+
+  private async getBlockMarkdown(blockId: string): Promise<string> {
+    const response = await fetch('/api/block/getBlockKramdown', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ id: blockId })
+    });
+
+    if (!response.ok) {
+      throw new Error('API请求失败');
+    }
+
+    const result = await response.json();
+    return result?.data?.kramdown || '';
   }
 
   // 使用思源API追加块
@@ -1489,6 +1639,27 @@ class WeatherLocationPlugin extends Plugin {
         data: content,
         dataType: 'markdown',
         parentID: blockId
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('API请求失败');
+    }
+
+    return response.json();
+  }
+
+  // 更新指定块内容
+  private async updateBlock(blockId: string, content: string) {
+    const response = await fetch('/api/block/updateBlock', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: blockId,
+        dataType: 'markdown',
+        data: content
       })
     });
 

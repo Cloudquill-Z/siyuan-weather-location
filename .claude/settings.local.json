@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(chmod +x /Users/lance/Documents/GitHub/siyuan-weather-location/node_modules/.bin/vite)",
+      "Bash(chmod +x /Users/lance/Documents/GitHub/siyuan-weather-location/node_modules/.bin/*)",
+      "Bash(chmod +x /Users/lance/Documents/GitHub/siyuan-weather-location/node_modules/@esbuild/darwin-arm64/bin/esbuild)",
+      "mcp__siyuan-mcp__system",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}
