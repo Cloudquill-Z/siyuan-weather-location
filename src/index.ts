@@ -1560,8 +1560,9 @@ class WeatherLocationPlugin extends Plugin {
   private async replaceBlockContent(blockId: string, content: string, triggers: string[] = []) {
     try {
       const currentMarkdown = await this.getBlockMarkdown(blockId);
-      const keptMarkdown = this.removeSlashTrigger(currentMarkdown, triggers);
-      const nextContent = keptMarkdown ? `${keptMarkdown} ${content}` : content;
+      const { content: blockContent, ial } = this.splitBlockIAL(currentMarkdown);
+      const keptMarkdown = this.removeSlashTrigger(blockContent, triggers);
+      const nextContent = this.withBlockIAL(keptMarkdown ? `${keptMarkdown} ${content}` : content, ial);
       await this.updateBlock(blockId, nextContent);
       showMessage('天气位置已插入');
     } catch (error) {
@@ -1570,7 +1571,7 @@ class WeatherLocationPlugin extends Plugin {
   }
 
   private removeSlashTrigger(markdown: string, triggers: string[]): string {
-    let result = this.removeBlockIAL(markdown)
+    let result = markdown
       .trim()
       .replace(/\\\//g, '/')
       .replace(/／/g, '/');
@@ -1604,11 +1605,29 @@ class WeatherLocationPlugin extends Plugin {
     return result.replace(/[ \t\u00a0]+$/g, '').trim();
   }
 
-  private removeBlockIAL(markdown: string): string {
-    return markdown
-      .split('\n')
-      .filter(line => !/^\s*\{:\s+.*\}\s*$/.test(line))
-      .join('\n');
+  private splitBlockIAL(markdown: string): { content: string; ial: string } {
+    const lines = markdown.split('\n');
+    const ialLines: string[] = [];
+    const contentLines = lines.filter(line => {
+      if (/^\s*\{:\s+.*\}\s*$/.test(line)) {
+        ialLines.push(line.trim());
+        return false;
+      }
+      return true;
+    });
+
+    return {
+      content: contentLines.join('\n'),
+      ial: ialLines.join('\n')
+    };
+  }
+
+  private withBlockIAL(content: string, ial: string): string {
+    const trimmedContent = content.trim();
+    if (!ial) {
+      return trimmedContent;
+    }
+    return `${trimmedContent}\n${ial}`;
   }
 
   private async getBlockMarkdown(blockId: string): Promise<string> {
