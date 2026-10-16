@@ -26,7 +26,7 @@ export class TemplateEngine {
   private replaceSimpleVariables(template: string, data: any): string {
     return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       const value = data[key];
-      return value !== undefined ? String(value) : match;
+      return value !== undefined && value !== null ? String(value) : '';
     });
   }
 
@@ -39,7 +39,7 @@ export class TemplateEngine {
       }
 
       const value = this.getNestedValue(data, path);
-      return value !== undefined ? String(value) : match;
+      return value !== undefined && value !== null ? String(value) : '';
     });
   }
 
@@ -138,6 +138,8 @@ export class TemplateEngine {
 📍 **当前位置**: {{location.city}}
 {{#if location.region}}🏘 **区域**: {{location.region}}
 {{/if}}{{#if location.district}}🏙 **区县**: {{location.district}}
+{{/if}}{{#if location.preciseAddress}}📌 **精确地址**: {{location.preciseAddress}}
+{{/if}}{{#if location.nearestPlace}}🏢 **附近地点**: {{location.nearestPlace}}
 {{/if}}{{#if location.formatted_address}}📝 **详细地址**: {{location.formatted_address}}
 {{/if}}{{#if location.country}}🌍 **国家**: {{location.country}}
 {{/if}}🌐 **坐标**: {{location.lat}}, {{location.lon}}

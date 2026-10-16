@@ -1,4 +1,328 @@
 /* 天气位置插件设置样式 - 限定在插件容器内 */
+#weather-location-settings.wl-settings {
+    padding: 16px;
+    max-height: 70vh;
+    overflow-y: auto;
+    color: var(--b3-theme-on-background);
+    background: var(--b3-theme-background);
+}
+
+#weather-location-settings .wl-settings__tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 16px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-surface);
+}
+
+#weather-location-settings .wl-settings__tab {
+    min-height: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--b3-theme-on-surface);
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#weather-location-settings .wl-settings__tab.is-active {
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-primary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+#weather-location-settings .wl-settings__page,
+#weather-location-settings .is-hidden {
+    display: none;
+}
+
+#weather-location-settings .wl-settings__page.is-active {
+    display: block;
+}
+
+#weather-location-settings .setting-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--b3-border-color);
+}
+
+#weather-location-settings .setting-section h3 {
+    margin: 0 0 14px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--b3-theme-on-background);
+}
+
+#weather-location-settings .setting-section h3 span {
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+#weather-location-settings .setting-item {
+    margin-bottom: 12px;
+}
+
+#weather-location-settings .setting-item label,
+#weather-location-settings #manual-city-panel label {
+    display: block;
+    margin: 10px 0 6px;
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#weather-location-settings input[type="text"],
+#weather-location-settings select,
+#weather-location-settings textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+#weather-location-settings textarea {
+    min-height: 180px;
+    resize: vertical;
+    font-family: var(--b3-font-family-code), monospace;
+}
+
+#weather-location-settings input:focus,
+#weather-location-settings select:focus,
+#weather-location-settings textarea:focus {
+    outline: 2px solid rgba(53, 128, 245, 0.2);
+    border-color: var(--b3-theme-primary);
+}
+
+#weather-location-settings .setting-help {
+    margin-top: 6px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+#weather-location-settings .setting-help a {
+    color: var(--b3-theme-primary);
+    text-decoration: none;
+}
+
+#weather-location-settings .wl-segmented {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+#weather-location-settings .wl-segmented button {
+    padding: 7px 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+#weather-location-settings .wl-segmented button.active {
+    border-color: var(--b3-theme-primary);
+    background: var(--b3-theme-primary);
+    color: var(--b3-theme-on-primary);
+}
+
+#weather-location-settings .wl-search-wrap {
+    position: relative;
+}
+
+#weather-location-settings #city-search-results {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--b3-border-color);
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+    background: var(--b3-theme-background);
+}
+
+#weather-location-settings #favorite-cities-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#weather-location-settings .wl-limit-warning {
+    margin-bottom: 10px;
+    color: var(--b3-theme-error);
+    font-size: 13px;
+}
+
+#weather-location-settings .wl-builder {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
+    gap: 16px;
+}
+
+#weather-location-settings .wl-field-list {
+    display: grid;
+    gap: 8px;
+}
+
+#weather-location-settings .wl-field-row {
+    display: grid;
+    grid-template-columns: 44px minmax(96px, 1fr) minmax(110px, 0.8fr) 32px 32px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-surface);
+}
+
+#weather-location-settings .wl-field-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin: 0;
+}
+
+#weather-location-settings .wl-field-key {
+    overflow: hidden;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#weather-location-settings .wl-preview {
+    min-width: 0;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-surface);
+}
+
+#weather-location-settings .wl-preview__label {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--b3-border-color);
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#weather-location-settings #output-preview {
+    max-height: 360px;
+    margin: 0;
+    padding: 12px;
+    overflow: auto;
+    color: var(--b3-theme-on-background);
+    font-family: var(--b3-font-family-code), monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+#weather-location-settings .wl-action-row,
+#weather-location-settings .setting-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+#weather-location-settings .wl-danger {
+    border-color: var(--b3-theme-error) !important;
+    color: var(--b3-theme-error) !important;
+}
+
+#weather-location-settings .wl-helper-status {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-surface);
+}
+
+#weather-location-settings .wl-status-dot {
+    width: 10px;
+    height: 10px;
+    margin-top: 5px;
+    border-radius: 999px;
+    background: var(--b3-theme-on-surface-light);
+}
+
+#weather-location-settings .wl-status-dot.is-running {
+    background: var(--b3-theme-success, #2ea043);
+}
+
+#weather-location-settings .wl-status-dot.is-stopped {
+    background: var(--b3-theme-error, #d73a49);
+}
+
+#weather-location-settings .wl-status-dot.is-stale {
+    background: var(--b3-theme-warning, #d29922);
+}
+
+#weather-location-settings .wl-helper-status__label {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#weather-location-settings .wl-helper-diagnostics {
+    margin-top: 16px;
+    padding: 14px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-background);
+}
+
+#weather-location-settings .wl-helper-diagnostics__title {
+    margin-bottom: 8px;
+    color: var(--b3-theme-on-background);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#weather-location-settings .wl-helper-diagnostics__body {
+    display: grid;
+    gap: 8px;
+}
+
+#weather-location-settings .wl-helper-diagnostics__row {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+}
+
+#weather-location-settings .wl-helper-diagnostics__row code {
+    min-width: 0;
+    color: var(--b3-theme-on-background);
+    font-family: var(--b3-font-family-code), monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+@media (max-width: 640px) {
+    #weather-location-settings .wl-helper-diagnostics__row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+}
+
 #weather-location-settings .b3-button--outline {
     border: 1px solid var(--b3-theme-surface-light);
     background: transparent;
@@ -95,6 +419,18 @@
     #weather-location-settings {
         padding: 12px !important;
         max-height: 80vh !important;
+    }
+
+    #weather-location-settings .wl-builder {
+        grid-template-columns: 1fr;
+    }
+
+    #weather-location-settings .wl-field-row {
+        grid-template-columns: 40px minmax(0, 1fr) 32px 32px;
+    }
+
+    #weather-location-settings .wl-field-key {
+        display: none;
     }
     
     #weather-location-settings .setting-section {

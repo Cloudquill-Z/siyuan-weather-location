@@ -66,6 +66,14 @@ The plugin supports custom templates using the following variables and syntax:
 - `{{location.township}}` - Township/Street
 - `{{location.street}}` - Street name
 - `{{location.streetNumber}}` - Street number
+- `{{location.preciseAddress}}` - Precise address from Amap plus reliable building/community data
+- `{{location.nearestPlace}}` - Nearby POI/AOI with distance
+- `{{location.nearestPoiName}}` - Nearest POI name
+- `{{location.nearestPoiDistance}}` - Nearest POI distance
+- `{{location.nearestAoiName}}` - Nearest AOI/community name
+- `{{location.nearestAoiDistance}}` - Nearest AOI/community distance
+- `{{location.nearestRoadName}}` - Nearest road name
+- `{{location.nearestRoadDistance}}` - Nearest road distance
 - `{{location.formatted_address}}` - Formatted full address
 - `{{location.country}}` - Country name
 - `{{location.region}}` - Region/Province (legacy alias for province)
@@ -104,6 +112,8 @@ The template engine supports conditional blocks:
 {{/if}}{{#if location.township}}🏘 **乡镇/街道**: {{location.township}}
 {{/if}}{{#if location.street}}🛣 **街道**: {{location.street}}
 {{/if}}{{#if location.streetNumber}}🔢 **门牌号**: {{location.streetNumber}}
+{{/if}}{{#if location.preciseAddress}}📌 **精确地址**: {{location.preciseAddress}}
+{{/if}}{{#if location.nearestPlace}}🏢 **附近地点**: {{location.nearestPlace}}
 {{/if}}{{#if location.formatted_address}}📝 **详细地址**: {{location.formatted_address}}
 {{/if}}{{#if location.country}}🌍 **国家**: {{location.country}}
 {{/if}}🌐 **坐标**: {{location.lat}}, {{location.lon}}

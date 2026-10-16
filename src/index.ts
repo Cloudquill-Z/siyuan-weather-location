@@ -3,6 +3,12 @@ import { WeatherService, WeatherData } from './weather';
 import { LocationService, LocationData } from './location';
 import { TemplateEngine } from './template';
 import { SettingTab } from './setting';
+import {
+  OutputConfig,
+  createDefaultOutputConfig,
+  normalizeOutputConfig,
+  renderOutputConfig
+} from './outputConfig';
 
 const STORAGE_NAME = 'weather-location-config';
 const MAX_FAVORITE_CITIES = 5;
@@ -113,6 +119,7 @@ interface PluginConfig {
   favoriteCities: FavoriteCity[];
   templates: SavedTemplate[];
   activeTemplateId: string;
+  outputConfig: OutputConfig;
 }
 
 const DEFAULT_CONFIG: PluginConfig = {
@@ -136,15 +143,18 @@ const DEFAULT_CONFIG: PluginConfig = {
 {{/if}}{{#if location.township}}🏘 **乡镇/街道**: {{location.township}}
 {{/if}}{{#if location.street}}🛣 **街道**: {{location.street}}
 {{/if}}{{#if location.streetNumber}}🔢 **门牌号**: {{location.streetNumber}}
+{{/if}}{{#if location.preciseAddress}}📌 **精确地址**: {{location.preciseAddress}}
+{{/if}}{{#if location.nearestPlace}}🏢 **附近地点**: {{location.nearestPlace}}
 {{/if}}{{#if location.formatted_address}}📝 **详细地址**: {{location.formatted_address}}
 {{/if}}{{#if location.country}}🌍 **国家**: {{location.country}}
 {{/if}}🌐 **坐标**: {{location.lat}}, {{location.lon}}
 
 ⏰ **记录时间**: {{time}}
-`,
+  `,
   favoriteCities: [],
   templates: [],
-  activeTemplateId: DEFAULT_TEMPLATE_ID
+  activeTemplateId: DEFAULT_TEMPLATE_ID,
+  outputConfig: createDefaultOutputConfig()
 };
 
 class WeatherLocationPlugin extends Plugin {
@@ -153,32 +163,33 @@ class WeatherLocationPlugin extends Plugin {
   private locationService!: LocationService;
   private templateEngine!: TemplateEngine;
   private slashCommandsRegistered: boolean = false; // 标记斜杠命令是否已注册
+  private lastNativeHelperDiagnosticsText = '';
 
   async onload() {
     console.log('[WeatherLocation] Plugin loading...');
-    
+
     try {
       // 加载配置
       await this.loadConfig();
       console.log('[WeatherLocation] Config loaded:', this.config);
-      
+
       // 初始化服务
       this.weatherService = new WeatherService(this.config);
-      this.locationService = new LocationService(this.config);
+      this.locationService = new LocationService(this.config, this.getPluginBasePath());
       this.templateEngine = new TemplateEngine();
-      
+
       // 注册命令
       this.registerCommand();
-      
+
       // 注册菜单
       this.registerMenu();
-      
+
       // 注册斜杠命令
       this.registerSlashCommand();
-      
+
       // 预加载位置和天气数据（后台异步执行）
       this.prefetchData();
-      
+
       console.log('[WeatherLocation] Plugin loaded successfully');
     } catch (error) {
       console.error('[WeatherLocation] Error loading plugin:', error);
@@ -188,6 +199,9 @@ class WeatherLocationPlugin extends Plugin {
 
   async onunload() {
     console.log('[WeatherLocation] Plugin unloading...');
+    if (this.locationService) {
+      await this.locationService.shutdownNativeHelper();
+    }
   }
 
   private async loadConfig() {
@@ -228,6 +242,8 @@ class WeatherLocationPlugin extends Plugin {
       config.template = config.templates.find(template => template.id === config.activeTemplateId)?.content || DEFAULT_CONFIG.template;
     }
 
+    config.outputConfig = normalizeOutputConfig(config.outputConfig);
+
     return config;
   }
 
@@ -257,12 +273,87 @@ class WeatherLocationPlugin extends Plugin {
     return this.escapeHtml(value);
   }
 
+  private getPluginBasePath(): string | undefined {
+    const nodeRequire = this.getNodeRequire();
+    if (!nodeRequire) {
+      console.warn('[WeatherLocation] 当前环境没有 Node require，无法解析插件目录');
+      return undefined;
+    }
+
+    try {
+      const path = nodeRequire('path');
+      const fs = nodeRequire('fs');
+      const candidates: string[] = [];
+      const workspaceDir = (window as any)?.siyuan?.config?.system?.workspaceDir;
+
+      if (workspaceDir) {
+        candidates.push(path.join(workspaceDir, 'data', 'plugins', this.name));
+      }
+
+      try {
+        const electron = nodeRequire('electron');
+        const app = electron?.remote?.app || electron?.app;
+        const documentsPath = app?.getPath?.('documents');
+        if (documentsPath) {
+          candidates.push(path.join(documentsPath, 'SiYuan', 'data', 'plugins', this.name));
+          candidates.push(path.join(documentsPath, 'Siyuan', 'data', 'plugins', this.name));
+        }
+      } catch (error) {
+        console.warn('[WeatherLocation] 无法通过 Electron 解析文档目录:', error);
+      }
+
+      if (typeof __dirname !== 'undefined' && !__dirname.includes('electron.asar')) {
+        candidates.push(__dirname);
+      }
+
+      const pluginBasePath = candidates.find(candidate => {
+        if (!fs.existsSync(path.join(candidate, 'plugin.json'))) {
+          return false;
+        }
+        try {
+          const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'plugin.json'), 'utf8'));
+          return manifest.name === this.name;
+        } catch {
+          return true;
+        }
+      });
+
+      console.log('[WeatherLocation] 插件目录解析结果:', pluginBasePath || candidates);
+      return pluginBasePath;
+    } catch (error) {
+      console.warn('[WeatherLocation] 解析插件目录失败:', error);
+      return undefined;
+    }
+  }
+
+  private getNodeRequire(): ((id: string) => any) | null {
+    const globalWindow = typeof window !== 'undefined' ? (window as any) : undefined;
+    if (globalWindow?.require) {
+      return globalWindow.require.bind(globalWindow);
+    }
+
+    try {
+      if (typeof require === 'function') {
+        return require;
+      }
+    } catch {
+      // Fall back to eval below for runtimes that expose require differently.
+    }
+
+    try {
+      return (0, eval)('require') as (id: string) => any;
+    } catch {
+      return null;
+    }
+  }
+
   async saveConfig() {
     try {
       await this.saveData(STORAGE_NAME, this.config);
       // 更新服务配置
       this.weatherService.updateConfig(this.config);
       this.locationService.updateConfig(this.config);
+      this.locationService.updatePluginBasePath(this.getPluginBasePath());
       // 清除位置和天气缓存，确保使用新配置
       this.locationService.clearCache();
       this.weatherService.clearCache();
@@ -276,13 +367,21 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
+  private renderConfiguredOutput(data: any): string {
+    if (this.config.outputConfig?.style === 'advanced') {
+      return this.templateEngine.render(this.config.template, data);
+    }
+
+    return renderOutputConfig(this.config.outputConfig, data);
+  }
+
   // 更新斜杠命令（用于配置更新时，避免完全重新注册导致重复）
   private updateSlashCommands() {
     console.log('[WeatherLocation] Updating slash commands...');
-    
+
     // 保留第一个命令（插入天气位置模板），只更新城市相关命令
-    const baseCommands = this.protyleSlash && this.protyleSlash.length > 0 
-      ? [this.protyleSlash[0]] 
+    const baseCommands = this.protyleSlash && this.protyleSlash.length > 0
+      ? [this.protyleSlash[0]]
       : [{
           filter: ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气'],
           html: '<span class="b3-list-item__text">🌤📍 插入天气位置模板</span>',
@@ -290,21 +389,21 @@ class WeatherLocationPlugin extends Plugin {
           callback: async (protyle: any, nodeElement: HTMLElement) => {
             const data = await this.getTemplateData();
             if (!data) return;
-            const content = this.templateEngine.render(this.config.template, data);
+            const content = this.renderConfiguredOutput(data);
             this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气']);
           }
         }];
-    
+
     // 添加常用城市天气插入命令
     this.config.favoriteCities.forEach((city, index) => {
       const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
       const pinyinFilter = pinyinPrefix ? `${pinyinPrefix}tq` : '';
-      
+
       const filters = [`${city.name}天气`, `${city.name} weather`, `${city.name} tianqi`];
       if (pinyinPrefix) {
         filters.push(pinyinFilter, `${pinyinPrefix}tianqi`);
       }
-      
+
       baseCommands.push({
         filter: filters,
         html: `<span class="b3-list-item__text">🌤 ${this.escapeHtml(city.name)}天气${pinyinPrefix ? ` (${this.escapeHtml(pinyinPrefix)}tq)` : ''}</span>`,
@@ -312,12 +411,12 @@ class WeatherLocationPlugin extends Plugin {
         callback: async (protyle: any, nodeElement: HTMLElement) => {
           const data = await this.getTemplateDataForCity(city);
           if (!data) return;
-          const content = this.templateEngine.render(this.config.template, data);
+          const content = this.renderConfiguredOutput(data);
           this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, filters);
         }
       });
     });
-    
+
     this.protyleSlash = baseCommands;
     console.log('[WeatherLocation] Slash commands updated, count:', baseCommands.length);
   }
@@ -325,7 +424,7 @@ class WeatherLocationPlugin extends Plugin {
   // 预加载位置和天气数据（后台异步执行）
   private prefetchData() {
     console.log('[WeatherLocation] 开始后台预加载数据...');
-    
+
     // 使用 setTimeout 确保不影响插件加载速度
     setTimeout(async () => {
       try {
@@ -333,7 +432,7 @@ class WeatherLocationPlugin extends Plugin {
         const location = await this.locationService.getCurrentLocation();
         if (location) {
           console.log('[WeatherLocation] 位置预加载成功:', location.city);
-          
+
           // 预加载天气
           const weather = await this.weatherService.getWeather(location.lat, location.lon);
           if (weather) {
@@ -355,7 +454,7 @@ class WeatherLocationPlugin extends Plugin {
 
   private registerCommand() {
     console.log('[WeatherLocation] Registering commands...');
-    
+
     // 注册插入天气命令
     this.addCommand({
       langKey: 'insert-weather',
@@ -391,23 +490,23 @@ class WeatherLocationPlugin extends Plugin {
         this.openSettings();
       }
     });
-    
+
     console.log('[WeatherLocation] Commands registered');
   }
 
   // 注册斜杠命令（仅在插件加载时调用一次）
   private registerSlashCommand() {
     console.log('[WeatherLocation] Registering slash commands...');
-    
+
     // 如果已经注册过，跳过（避免重复）
     if (this.slashCommandsRegistered) {
       console.log('[WeatherLocation] 斜杠命令已注册，跳过重复注册');
       return;
     }
-    
+
     // 清空现有的斜杠命令
     this.protyleSlash = [];
-    
+
     const slashCommands: any[] = [
       {
         filter: ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气'],
@@ -416,7 +515,7 @@ class WeatherLocationPlugin extends Plugin {
         callback: async (protyle: any, nodeElement: HTMLElement) => {
           const data = await this.getTemplateData();
           if (!data) return;
-          const content = this.templateEngine.render(this.config.template, data);
+          const content = this.renderConfiguredOutput(data);
           this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气']);
         }
       }
@@ -427,13 +526,13 @@ class WeatherLocationPlugin extends Plugin {
       // 优先使用用户自定义的快捷指令前缀，如果没有则自动生成
       const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
       const pinyinFilter = pinyinPrefix ? `${pinyinPrefix}tq` : '';
-      
+
       // 合并所有过滤条件到一个指令中（避免快捷面板显示多个指令）
       const filters = [`${city.name}天气`, `${city.name} weather`, `${city.name} tianqi`];
       if (pinyinPrefix) {
         filters.push(pinyinFilter, `${pinyinPrefix}tianqi`);
       }
-      
+
       slashCommands.push({
         filter: filters,
         html: `<span class="b3-list-item__text">🌤 ${this.escapeHtml(city.name)}天气${pinyinPrefix ? ` (${this.escapeHtml(pinyinPrefix)}tq)` : ''}</span>`,
@@ -441,16 +540,16 @@ class WeatherLocationPlugin extends Plugin {
         callback: async (protyle: any, nodeElement: HTMLElement) => {
           const data = await this.getTemplateDataForCity(city);
           if (!data) return;
-          const content = this.templateEngine.render(this.config.template, data);
+          const content = this.renderConfiguredOutput(data);
           this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, filters);
         }
       });
-      
+
       if (pinyinPrefix) {
         console.log(`[WeatherLocation] 注册快捷指令: ${city.name}天气 / ${pinyinFilter}`);
       }
     });
-    
+
     // 使用数组赋值方式，确保思源笔记能正确识别
     this.protyleSlash = slashCommands;
     this.slashCommandsRegistered = true;
@@ -459,17 +558,17 @@ class WeatherLocationPlugin extends Plugin {
 
   private registerMenu() {
     console.log('[WeatherLocation] Registering menu...');
-    
+
     // 编辑器左键菜单功能已移除
     // 如需插入天气信息，请使用快捷面板或斜杠命令
-    
+
     console.log('[WeatherLocation] Menu registered (no items)');
   }
 
   // 打开设置对话框
   private openSettings() {
     console.log('[WeatherLocation] Opening settings...');
-    
+
     try {
       const dialog = new Dialog({
         title: '天气与位置插件设置',
@@ -481,7 +580,7 @@ class WeatherLocationPlugin extends Plugin {
       setTimeout(() => {
         this.bindSettingsEvents(dialog);
       }, 100);
-      
+
       console.log('[WeatherLocation] Settings dialog opened');
     } catch (error) {
       console.error('[WeatherLocation] Error opening settings:', error);
@@ -494,83 +593,140 @@ class WeatherLocationPlugin extends Plugin {
     const maskedAmapKey = this.maskAmapKey(this.config.amapKey);
     const escapedTemplate = this.escapeHtml(this.config.template);
     return `
-      <div id="weather-location-settings" style="padding: 20px; max-height: 400px; overflow-y: auto;">
-        <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">高德地图设置</h3>
-          <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">高德地图 Key</label>
-            <input type="text" id="amap-key" value="${this.escapeAttribute(maskedAmapKey)}" data-original-key="${this.escapeAttribute(this.config.amapKey)}" placeholder="天气和位置均需此 Key" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-            <div style="font-size: 12px; color: #999; margin-top: 4px;">已保存的 Key 会脱敏显示。需要修改时，直接输入新的完整 Key。前往 <a href="https://lbs.amap.com/" target="_blank">高德开放平台</a> 申请 Key</div>
-          </div>
+      <div id="weather-location-settings" class="wl-settings">
+        <div class="wl-settings__tabs" role="tablist">
+          <button class="wl-settings__tab is-active" data-settings-page="main" type="button">常规与输出</button>
+          <button class="wl-settings__tab" data-settings-page="helper" type="button">定位辅助器</button>
         </div>
 
-        <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">常用地点 <span style="font-size: 12px; font-weight: normal; color: #999;">(最多5个)</span></h3>
-          
-          <!-- 添加方式切换 -->
-          <div class="setting-item" id="favorite-city-search-container" style="margin-bottom: 12px; display: ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? 'none' : 'block'};">
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-              <button id="toggle-search-mode" class="city-add-mode-btn active" style="padding: 6px 12px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer; font-size: 13px;">搜索添加</button>
-              <button id="toggle-manual-mode" class="city-add-mode-btn" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; font-size: 13px;">手动录入</button>
+        <div class="wl-settings__page is-active" data-page="main">
+          <div class="setting-section">
+            <h3>高德地图设置</h3>
+            <div class="setting-item">
+              <label>高德地图 Key</label>
+              <input type="text" id="amap-key" value="${this.escapeAttribute(maskedAmapKey)}" data-original-key="${this.escapeAttribute(this.config.amapKey)}" placeholder="天气和位置均需此 Key">
+              <div class="setting-help">已保存的 Key 会脱敏显示。需要修改时，直接输入新的完整 Key。前往 <a href="https://lbs.amap.com/" target="_blank">高德开放平台</a> 申请 Key</div>
             </div>
-            
-            <!-- 搜索模式 -->
-            <div id="search-city-panel">
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">搜索地点</label>
-              <div style="position: relative;">
-                <input type="text" id="favorite-city-search" placeholder="输入城市、区县、街道或小区（如：北京、华容县、人民路、某小区）" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-                <div id="city-search-results" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none;"></div>
+          </div>
+
+          <div class="setting-section">
+            <h3>常用地点 <span>(最多5个)</span></h3>
+
+            <div class="setting-item" id="favorite-city-search-container" style="display: ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? 'none' : 'block'};">
+              <div class="wl-segmented">
+                <button id="toggle-search-mode" class="city-add-mode-btn active" type="button">搜索添加</button>
+                <button id="toggle-manual-mode" class="city-add-mode-btn" type="button">手动录入</button>
               </div>
-              <div style="font-size: 12px; color: #999; margin-top: 5px;">支持高德地点搜索，城市、区县、街道和具体小区都可以添加</div>
+
+              <div id="search-city-panel">
+                <label>搜索地点</label>
+                <div class="wl-search-wrap">
+                  <input type="text" id="favorite-city-search" placeholder="输入城市、区县、街道或小区">
+                  <div id="city-search-results"></div>
+                </div>
+                <div class="setting-help">支持高德地点搜索，城市、区县、街道和具体小区都可以添加</div>
+              </div>
+
+              <div id="manual-city-panel" style="display: none;">
+                <label>地点名称</label>
+                <input type="text" id="manual-city-name" placeholder="如：北京、华容县、人民路、某小区">
+
+                <label>纬度</label>
+                <input type="text" id="manual-city-lat" placeholder="如：39.9042">
+
+                <label>经度</label>
+                <input type="text" id="manual-city-lon" placeholder="如：116.4074">
+
+                <label>快捷指令（可选，如：bj）</label>
+                <input type="text" id="manual-city-prefix" placeholder="留空则自动生成">
+
+                <button id="add-manual-city-btn" class="b3-button b3-button--primary" type="button">添加地点</button>
+                <div class="setting-help">格式：地点名、纬度、经度。可在地图软件中查询坐标</div>
+              </div>
             </div>
-            
-            <!-- 手动录入模式 -->
-            <div id="manual-city-panel" style="display: none;">
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">地点名称</label>
-              <input type="text" id="manual-city-name" placeholder="如：北京、华容县、人民路、某小区" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;">
-              
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">纬度</label>
-              <input type="text" id="manual-city-lat" placeholder="如：39.9042" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;">
-              
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">经度</label>
-              <input type="text" id="manual-city-lon" placeholder="如：116.4074" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;">
-              
-              <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">快捷指令（可选，如：bj）</label>
-              <input type="text" id="manual-city-prefix" placeholder="留空则自动生成" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 10px;">
-              
-              <button id="add-manual-city-btn" style="padding: 8px 16px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer; font-size: 14px; width: 100%;">添加地点</button>
-              <div style="font-size: 12px; color: #999; margin-top: 5px;">格式：地点名,纬度,经度。可在地图软件中查询坐标</div>
+
+            ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? '<div class="wl-limit-warning">已达到最大数量限制（5个），如需添加请先删除现有地点</div>' : ''}
+            <div id="favorite-cities-list">
+              ${this.renderFavoriteCitiesList()}
             </div>
           </div>
-          
-          ${this.config.favoriteCities.length >= MAX_FAVORITE_CITIES ? '<div style="color: #ff4d4f; font-size: 13px; margin-bottom: 10px;">已达到最大数量限制（5个），如需添加请先删除现有地点</div>' : ''}
-          <div id="favorite-cities-list" style="max-height: 200px; overflow-y: auto;">
-            ${this.renderFavoriteCitiesList()}
+
+          <div class="setting-section">
+            <h3>输出配置</h3>
+            <div class="setting-item">
+              <label>输出样式</label>
+              <select id="output-style">
+                <option value="grouped"${this.config.outputConfig.style === 'grouped' ? ' selected' : ''}>分组详情</option>
+                <option value="compact"${this.config.outputConfig.style === 'compact' ? ' selected' : ''}>简洁文本</option>
+                <option value="table"${this.config.outputConfig.style === 'table' ? ' selected' : ''}>Markdown 表格</option>
+                <option value="advanced"${this.config.outputConfig.style === 'advanced' ? ' selected' : ''}>高级模板</option>
+              </select>
+            </div>
+            <div class="setting-item" id="output-title-item">
+              <label>标题</label>
+              <input type="text" id="output-title" value="${this.escapeAttribute(this.config.outputConfig.title)}" placeholder="今日天气与位置">
+            </div>
+            <div id="visual-output-panel" class="${this.config.outputConfig.style === 'advanced' ? 'is-hidden' : ''}">
+              <div class="wl-builder">
+                <div class="wl-field-list">
+                  ${this.renderOutputFieldList()}
+                </div>
+                <div class="wl-preview">
+                  <div class="wl-preview__label">预览</div>
+                  <pre id="output-preview">${this.escapeHtml(this.renderOutputPreview())}</pre>
+                </div>
+              </div>
+            </div>
+            <div id="advanced-template-panel" class="${this.config.outputConfig.style === 'advanced' ? '' : 'is-hidden'}">
+              <div class="setting-item">
+                <label>已保存模板</label>
+                <select id="template-select">
+                  ${this.renderTemplateOptions()}
+                </select>
+              </div>
+              <div class="setting-item">
+                <label>当前模板内容</label>
+                <textarea id="template" rows="8">${escapedTemplate}</textarea>
+              </div>
+              <div class="wl-action-row">
+                <button id="save-template-btn" class="b3-button b3-button--primary" type="button">保存模板</button>
+                <button id="help-btn" class="b3-button b3-button--text" type="button">查看变量说明</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-actions">
+            <button id="save-btn" class="b3-button b3-button--primary" type="button">保存设置</button>
+            <button id="test-btn" class="b3-button b3-button--outline" type="button">测试获取数据</button>
+            <button id="clear-cache-btn" class="b3-button b3-button--outline wl-danger" type="button">清除缓存</button>
           </div>
         </div>
 
-        <div class="setting-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 600; color: #333;">模板设置</h3>
-          <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">已保存模板</label>
-            <select id="template-select" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-              ${this.renderTemplateOptions()}
-            </select>
+        <div class="wl-settings__page" data-page="helper">
+          <div class="setting-section">
+            <h3>定位辅助器</h3>
+            <div class="wl-helper-status">
+              <span id="native-helper-status-dot" class="wl-status-dot"></span>
+              <div>
+                <div id="native-helper-status-label" class="wl-helper-status__label">正在读取状态...</div>
+                <div class="setting-help">原生定位辅助器用于获取更稳定的系统级坐标；不可用时会回退到浏览器定位。</div>
+              </div>
+            </div>
+            <div class="setting-actions">
+              <button id="helper-start-btn" class="b3-button b3-button--primary" type="button">启动</button>
+              <button id="helper-stop-btn" class="b3-button b3-button--outline" type="button">关闭</button>
+              <button id="helper-restart-btn" class="b3-button b3-button--outline" type="button">重启</button>
+              <button id="helper-clean-restart-btn" class="b3-button b3-button--outline wl-danger" type="button">清理并重启</button>
+              <button id="helper-refresh-btn" class="b3-button b3-button--text" type="button">刷新状态</button>
+            </div>
+            <div class="wl-helper-diagnostics">
+              <div class="wl-helper-diagnostics__title">诊断信息</div>
+              <div id="native-helper-diagnostics" class="wl-helper-diagnostics__body">正在读取诊断信息...</div>
+              <div class="setting-actions">
+                <button id="helper-copy-diagnostics-btn" class="b3-button b3-button--text" type="button">复制诊断信息</button>
+              </div>
+            </div>
           </div>
-          <div class="setting-item" style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">当前模板内容</label>
-            <textarea id="template" rows="8" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; font-family: monospace;">${escapedTemplate}</textarea>
-          </div>
-          <div class="setting-item" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
-            <button id="save-template-btn" style="padding: 6px 12px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer;">保存模板</button>
-            <button id="help-btn" style="padding: 6px 12px; border: none; background: transparent; color: #1890ff; cursor: pointer;">查看变量说明</button>
-          </div>
-        </div>
-
-        <div class="setting-actions" style="display: flex; gap: 10px; margin-top: 20px;">
-          <button id="save-btn" style="padding: 8px 16px; border: 1px solid #1890ff; border-radius: 4px; background: #1890ff; color: white; cursor: pointer; font-size: 14px;">保存设置</button>
-          <button id="test-btn" style="padding: 8px 16px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; font-size: 14px;">测试获取数据</button>
-          <button id="clear-cache-btn" style="padding: 8px 16px; border: 1px solid #ff4d4f; border-radius: 4px; background: white; color: #ff4d4f; cursor: pointer; font-size: 14px;">清除缓存</button>
         </div>
       </div>
     `;
@@ -581,6 +737,57 @@ class WeatherLocationPlugin extends Plugin {
       const selected = template.id === this.config.activeTemplateId ? ' selected' : '';
       return `<option value="${this.escapeAttribute(template.id)}"${selected}>${this.escapeHtml(template.name)}</option>`;
     }).join('');
+  }
+
+  private renderOutputFieldList(): string {
+    return this.config.outputConfig.fields.map((field, index) => `
+      <div class="wl-field-row" data-field-index="${index}">
+        <label class="wl-field-toggle">
+          <input class="output-field-enabled" type="checkbox" ${field.enabled ? 'checked' : ''}>
+          <span>${this.escapeHtml(field.icon)}</span>
+        </label>
+        <input class="output-field-label" type="text" value="${this.escapeAttribute(field.label)}" aria-label="字段显示名">
+        <div class="wl-field-key">${this.escapeHtml(field.key)}</div>
+        <button class="output-field-up b3-button b3-button--text" type="button" title="上移" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button class="output-field-down b3-button b3-button--text" type="button" title="下移" ${index === this.config.outputConfig.fields.length - 1 ? 'disabled' : ''}>↓</button>
+      </div>
+    `).join('');
+  }
+
+  private renderOutputPreview(): string {
+    return renderOutputConfig(this.config.outputConfig, this.createPreviewData());
+  }
+
+  private createPreviewData() {
+    return {
+      weather: {
+        description: '晴转多云',
+        dayWeather: '晴',
+        nightWeather: '多云',
+        temperature: 28,
+        humidity: 62,
+        windDirection: '东南风',
+        windPower: '3级',
+        windSpeed: 3.6,
+        tempMin: 22,
+        tempMax: 31
+      },
+      location: {
+        city: '岳阳市',
+        country: '中国',
+        province: '湖南省',
+        district: '华容县',
+        township: '章华镇',
+        street: '人民路',
+        streetNumber: '88号',
+        preciseAddress: '湖南省岳阳市华容县章华镇人民路',
+        nearestPlace: '示例小区（约80米）',
+        formatted_address: '湖南省岳阳市华容县章华镇人民路88号',
+        lat: 29.52,
+        lon: 112.55
+      },
+      time: new Date().toLocaleString('zh-CN')
+    };
   }
 
   private saveCurrentTemplate(): SavedTemplate {
@@ -619,6 +826,10 @@ class WeatherLocationPlugin extends Plugin {
     }
     (container as any)._settingsEventsBound = true;
 
+    this.bindSettingsTabEvents();
+    this.bindOutputConfigEvents();
+    this.bindNativeHelperEvents();
+
     // 高德 Key
     const amapKey = container.querySelector('#amap-key') as HTMLInputElement;
     const originalAmapKey = amapKey?.dataset.originalKey || '';
@@ -653,15 +864,21 @@ class WeatherLocationPlugin extends Plugin {
       }
       this.config.activeTemplateId = selectedTemplate.id;
       this.config.template = selectedTemplate.content;
-      template.value = selectedTemplate.content;
+      if (template) {
+        template.value = selectedTemplate.content;
+      }
     });
 
     const saveTemplateBtn = container.querySelector('#save-template-btn') as HTMLButtonElement;
     saveTemplateBtn?.addEventListener('click', async () => {
-      this.config.template = template.value;
+      if (template) {
+        this.config.template = template.value;
+      }
       const savedTemplate = this.saveCurrentTemplate();
-      templateSelect.innerHTML = this.renderTemplateOptions();
-      templateSelect.value = savedTemplate.id;
+      if (templateSelect) {
+        templateSelect.innerHTML = this.renderTemplateOptions();
+        templateSelect.value = savedTemplate.id;
+      }
       await this.saveConfig();
       showMessage(`${savedTemplate.name} 已保存`);
     });
@@ -678,7 +895,9 @@ class WeatherLocationPlugin extends Plugin {
       if (amapKey && !amapKey.value.includes(AMAP_KEY_MASK)) {
         this.config.amapKey = amapKey.value.trim();
       }
-      this.config.template = template.value;
+      if (template) {
+        this.config.template = template.value;
+      }
       await this.saveConfig();
       showMessage('设置已保存');
       dialog.destroy();
@@ -703,12 +922,288 @@ class WeatherLocationPlugin extends Plugin {
 
     // 城市搜索功能
     this.bindCitySearchEvents();
-    
+
     // 手动录入城市功能
     this.bindManualCityEvents();
-    
+
     // 添加方式切换
     this.bindAddModeToggleEvents();
+  }
+
+  private bindSettingsTabEvents() {
+    const container = document.getElementById('weather-location-settings');
+    if (!container) return;
+
+    container.querySelectorAll<HTMLElement>('[data-settings-page]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const page = tab.dataset.settingsPage;
+        container.querySelectorAll('.wl-settings__tab').forEach(item => item.classList.remove('is-active'));
+        container.querySelectorAll('.wl-settings__page').forEach(item => item.classList.remove('is-active'));
+        tab.classList.add('is-active');
+        container.querySelector(`[data-page="${page}"]`)?.classList.add('is-active');
+      });
+    });
+  }
+
+  private bindOutputConfigEvents() {
+    const container = document.getElementById('weather-location-settings');
+    if (!container) return;
+
+    const styleSelect = container.querySelector('#output-style') as HTMLSelectElement;
+    const titleInput = container.querySelector('#output-title') as HTMLInputElement;
+
+    styleSelect?.addEventListener('change', () => {
+      this.config.outputConfig.style = styleSelect.value as OutputConfig['style'];
+      this.updateOutputModeVisibility();
+      this.updateOutputPreview();
+    });
+
+    titleInput?.addEventListener('input', () => {
+      this.config.outputConfig.title = titleInput.value;
+      this.updateOutputPreview();
+    });
+
+    const fieldList = container.querySelector('.wl-field-list') as HTMLElement;
+    fieldList?.addEventListener('input', (event) => {
+      const target = event.target as HTMLInputElement;
+      const row = target.closest('.wl-field-row') as HTMLElement;
+      if (!row) return;
+
+      const index = Number(row.dataset.fieldIndex);
+      const field = this.config.outputConfig.fields[index];
+      if (!field) return;
+
+      if (target.classList.contains('output-field-enabled')) {
+        field.enabled = target.checked;
+      }
+
+      if (target.classList.contains('output-field-label')) {
+        field.label = target.value.trim() || field.label;
+      }
+
+      this.updateOutputPreview();
+    });
+
+    fieldList?.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      const row = target.closest('.wl-field-row') as HTMLElement;
+      if (!row) return;
+
+      const index = Number(row.dataset.fieldIndex);
+      if (target.closest('.output-field-up')) {
+        this.moveOutputField(index, -1);
+      }
+      if (target.closest('.output-field-down')) {
+        this.moveOutputField(index, 1);
+      }
+    });
+  }
+
+  private updateOutputModeVisibility() {
+    const container = document.getElementById('weather-location-settings');
+    if (!container) return;
+
+    const isAdvanced = this.config.outputConfig.style === 'advanced';
+    container.querySelector('#visual-output-panel')?.classList.toggle('is-hidden', isAdvanced);
+    container.querySelector('#advanced-template-panel')?.classList.toggle('is-hidden', !isAdvanced);
+    container.querySelector('#output-title-item')?.classList.toggle('is-hidden', isAdvanced);
+  }
+
+  private updateOutputPreview() {
+    const preview = document.getElementById('output-preview');
+    if (preview) {
+      preview.textContent = this.renderOutputPreview();
+    }
+  }
+
+  private moveOutputField(index: number, offset: number) {
+    const targetIndex = index + offset;
+    const fields = this.config.outputConfig.fields;
+    if (targetIndex < 0 || targetIndex >= fields.length) {
+      return;
+    }
+
+    const [field] = fields.splice(index, 1);
+    fields.splice(targetIndex, 0, field);
+    const list = document.querySelector('#weather-location-settings .wl-field-list');
+    if (list) {
+      list.innerHTML = this.renderOutputFieldList();
+    }
+    this.updateOutputPreview();
+  }
+
+  private bindNativeHelperEvents() {
+    const container = document.getElementById('weather-location-settings');
+    if (!container) return;
+
+    const runAction = async (message: string, successMessage: string, failureMessage: string, action: () => Promise<boolean>) => {
+      showMessage(message);
+      const ok = await action();
+      await this.refreshNativeHelperStatus();
+      showMessage(ok ? successMessage : failureMessage);
+    };
+
+    const runDetailedAction = async (
+      message: string,
+      successMessage: string,
+      action: () => Promise<Awaited<ReturnType<LocationService['ensureNativeHelperDetailed']>>>
+    ) => {
+      showMessage(message);
+      const result = await action();
+      await this.refreshNativeHelperStatus();
+      showMessage(result.ok ? successMessage : result.message);
+    };
+
+    container.querySelector('#helper-start-btn')?.addEventListener('click', async () => {
+      await runDetailedAction(
+        '正在启动定位辅助器...',
+        '定位辅助器已启动',
+        () => this.locationService.ensureNativeHelperDetailed()
+      );
+    });
+
+    container.querySelector('#helper-stop-btn')?.addEventListener('click', async () => {
+      await runAction(
+        '正在关闭定位辅助器...',
+        '定位辅助器已关闭',
+        '定位辅助器未运行或关闭失败',
+        () => this.locationService.shutdownNativeHelper()
+      );
+    });
+
+    container.querySelector('#helper-restart-btn')?.addEventListener('click', async () => {
+      await runDetailedAction(
+        '正在重启定位辅助器...',
+        '定位辅助器已重启',
+        () => this.locationService.restartNativeHelperDetailed()
+      );
+    });
+
+    container.querySelector('#helper-clean-restart-btn')?.addEventListener('click', async () => {
+      showMessage('正在清理并重启定位辅助器...');
+      const cleanup = await this.locationService.cleanupStaleNativeHelpers();
+      const result = await this.locationService.restartNativeHelperDetailed();
+      await this.refreshNativeHelperStatus();
+      if (result.ok) {
+        showMessage(cleanup.killed.length > 0 ? '已清理卡住进程并重启定位辅助器' : '定位辅助器已重启');
+      } else {
+        showMessage(cleanup.ok ? result.message : `${cleanup.message}: ${cleanup.error || result.message}`);
+      }
+    });
+
+    container.querySelector('#helper-refresh-btn')?.addEventListener('click', async () => {
+      await this.refreshNativeHelperStatus();
+    });
+
+    container.querySelector('#helper-copy-diagnostics-btn')?.addEventListener('click', async () => {
+      await this.copyNativeHelperDiagnostics();
+    });
+
+    this.refreshNativeHelperStatus();
+  }
+
+  private async refreshNativeHelperStatus() {
+    const label = document.getElementById('native-helper-status-label');
+    const dot = document.getElementById('native-helper-status-dot');
+    const diagnosticsContainer = document.getElementById('native-helper-diagnostics');
+    if (!label || !dot) return;
+
+    label.textContent = '正在读取状态...';
+    dot.classList.remove('is-running', 'is-stopped', 'is-stale');
+    if (diagnosticsContainer) {
+      diagnosticsContainer.textContent = '正在读取诊断信息...';
+    }
+
+    try {
+      const diagnostics = await this.locationService.getNativeHelperDiagnostics();
+      const running = diagnostics.status === 'running';
+      const stale = diagnostics.status === 'stale';
+      label.textContent = running ? '运行中' : stale ? '进程卡住，服务未响应' : '未运行';
+      dot.classList.toggle('is-running', running);
+      dot.classList.toggle('is-stale', stale);
+      dot.classList.toggle('is-stopped', !running && !stale);
+      this.lastNativeHelperDiagnosticsText = this.formatNativeHelperDiagnosticsText(diagnostics);
+      if (diagnosticsContainer) {
+        diagnosticsContainer.innerHTML = this.renderNativeHelperDiagnostics(diagnostics);
+      }
+    } catch (error) {
+      console.error('[WeatherLocation] 获取定位辅助器状态失败:', error);
+      label.textContent = '状态读取失败';
+      dot.classList.add('is-stopped');
+      this.lastNativeHelperDiagnosticsText = `状态读取失败: ${(error as Error).message}`;
+      if (diagnosticsContainer) {
+        diagnosticsContainer.textContent = this.lastNativeHelperDiagnosticsText;
+      }
+    }
+  }
+
+  private renderNativeHelperDiagnostics(diagnostics: Awaited<ReturnType<LocationService['getNativeHelperDiagnostics']>>): string {
+    const rows = this.getNativeHelperDiagnosticRows(diagnostics);
+    return rows.map(row => `
+      <div class="wl-helper-diagnostics__row">
+        <span>${this.escapeHtml(row.label)}</span>
+        <code>${this.escapeHtml(row.value)}</code>
+      </div>
+    `).join('');
+  }
+
+  private formatNativeHelperDiagnosticsText(diagnostics: Awaited<ReturnType<LocationService['getNativeHelperDiagnostics']>>): string {
+    return this.getNativeHelperDiagnosticRows(diagnostics)
+      .map(row => `${row.label}: ${row.value}`)
+      .join('\n');
+  }
+
+  private getNativeHelperDiagnosticRows(diagnostics: Awaited<ReturnType<LocationService['getNativeHelperDiagnostics']>>): Array<{ label: string; value: string }> {
+    const lastResult = diagnostics.lastResult;
+    const staleProcesses = diagnostics.staleProcesses || [];
+    const rows = [
+      { label: '状态', value: this.getNativeHelperStatusText(diagnostics.status) },
+      { label: '运行环境', value: `${diagnostics.runtime.requireSource}${diagnostics.runtime.platform ? ` / ${diagnostics.runtime.platform}` : ''}` },
+      { label: '辅助器安装目录', value: diagnostics.paths?.installDir || '未解析' },
+      { label: '辅助器文件', value: diagnostics.paths?.helperBinary || diagnostics.paths?.helperScript || '未解析' },
+      { label: '插件目录', value: diagnostics.pluginBasePath || '未解析' },
+      { label: '日志文件', value: diagnostics.paths?.logFile || '未解析' },
+      { label: '卡住进程', value: staleProcesses.length > 0 ? staleProcesses.map(processInfo => `${processInfo.pid}`).join(', ') : '无' }
+    ];
+
+    if (lastResult) {
+      rows.push(
+        { label: '最近启动阶段', value: `${lastResult.stage} / ${lastResult.method}` },
+        { label: '最近启动结果', value: lastResult.message }
+      );
+      if (lastResult.error) {
+        rows.push({ label: '最近错误', value: lastResult.error });
+      }
+      if (lastResult.logTail) {
+        rows.push({ label: '日志片段', value: lastResult.logTail });
+      }
+    }
+
+    return rows;
+  }
+
+  private getNativeHelperStatusText(status: 'running' | 'stopped' | 'stale'): string {
+    if (status === 'running') {
+      return '运行中';
+    }
+    if (status === 'stale') {
+      return '进程卡住，服务未响应';
+    }
+    return '未运行';
+  }
+
+  private async copyNativeHelperDiagnostics() {
+    if (!this.lastNativeHelperDiagnosticsText) {
+      await this.refreshNativeHelperStatus();
+    }
+
+    try {
+      await navigator.clipboard.writeText(this.lastNativeHelperDiagnosticsText);
+      showMessage('诊断信息已复制');
+    } catch (error) {
+      console.error('[WeatherLocation] 复制定位辅助器诊断信息失败:', error);
+      showMessage('复制失败，请手动选择诊断信息');
+    }
   }
 
   // 绑定城市搜索事件（使用事件委托，避免重复绑定）
@@ -718,7 +1213,7 @@ class WeatherLocationPlugin extends Plugin {
 
     const searchInput = container.querySelector('#favorite-city-search') as HTMLInputElement;
     const searchResults = container.querySelector('#city-search-results') as HTMLDivElement;
-    
+
     if (!searchInput || !searchResults) return;
 
     // 检查是否已经绑定过事件（通过自定义属性标记）
@@ -734,7 +1229,7 @@ class WeatherLocationPlugin extends Plugin {
     // 输入事件（防抖）
     searchInput.addEventListener('input', () => {
       const query = searchInput.value.trim();
-      
+
       // 清除之前的定时器
       if (searchTimeout) {
         clearTimeout(searchTimeout);
@@ -749,7 +1244,7 @@ class WeatherLocationPlugin extends Plugin {
       searchTimeout = setTimeout(async () => {
         showMessage('正在搜索...');
         currentResults = await this.searchCities(query);
-        
+
         if (currentResults.length > 0) {
           searchResults.innerHTML = this.renderSearchResults(currentResults);
           searchResults.style.display = 'block';
@@ -764,11 +1259,11 @@ class WeatherLocationPlugin extends Plugin {
     searchResults.addEventListener('click', async (e) => {
       const target = e.target as HTMLElement;
       const resultItem = target.closest('.city-search-result') as HTMLElement;
-      
+
       if (resultItem) {
         const index = parseInt(resultItem.dataset.index || '0');
         const selectedCity = currentResults[index];
-        
+
         if (selectedCity && this.addFavoriteCity(selectedCity)) {
           await this.saveConfig();
           this.updateFavoriteCitiesUI();
@@ -814,10 +1309,10 @@ class WeatherLocationPlugin extends Plugin {
   private updateFavoriteCitiesUI() {
     // 更新城市列表
     this.updateFavoriteCitiesList();
-    
+
     // 更新搜索容器的显示状态
     const searchContainer = document.getElementById('favorite-city-search-container');
-    
+
     if (this.config.favoriteCities.length >= MAX_FAVORITE_CITIES) {
       // 达到最大数量，隐藏搜索容器
       if (searchContainer) {
@@ -1010,7 +1505,7 @@ class WeatherLocationPlugin extends Plugin {
       pinyinPrefix: pinyinPrefix,
       address: name.trim()
     });
-    
+
     return true;
   }
 
@@ -1022,7 +1517,7 @@ class WeatherLocationPlugin extends Plugin {
     }
 
     const city = this.config.favoriteCities[index];
-    
+
     // 检查名称是否与其他地点重复
     if (updates.name && updates.name !== city.name) {
       const exists = this.config.favoriteCities.some((c, i) => i !== index && c.name === updates.name);
@@ -1038,12 +1533,12 @@ class WeatherLocationPlugin extends Plugin {
       ...updates,
       name: updates.name?.trim() || city.name
     };
-    
+
     // 特殊处理 pinyinPrefix：如果提供了值（包括空字符串），则更新；否则保留原值
     if (updates.pinyinPrefix !== undefined) {
       updatedCity.pinyinPrefix = updates.pinyinPrefix.trim();
     }
-    
+
     this.config.favoriteCities[index] = updatedCity;
 
     console.log(`[WeatherLocation] 更新地点 ${index}:`, this.config.favoriteCities[index]);
@@ -1152,7 +1647,7 @@ class WeatherLocationPlugin extends Plugin {
     // 使用事件委托，在容器上监听点击事件
     container.addEventListener('click', async (e) => {
       const target = e.target as HTMLElement;
-      
+
       // 处理删除按钮
       const removeBtn = target.closest('.remove-favorite-city') as HTMLElement;
       if (removeBtn) {
@@ -1163,7 +1658,7 @@ class WeatherLocationPlugin extends Plugin {
         showMessage('地点已删除');
         return;
       }
-      
+
       // 处理编辑按钮
       const editBtn = target.closest('.edit-favorite-city') as HTMLElement;
       if (editBtn) {
@@ -1191,12 +1686,12 @@ class WeatherLocationPlugin extends Plugin {
       searchModeBtn.style.background = '#1890ff';
       searchModeBtn.style.color = 'white';
       searchModeBtn.style.borderColor = '#1890ff';
-      
+
       manualModeBtn.classList.remove('active');
       manualModeBtn.style.background = 'white';
       manualModeBtn.style.color = '';
       manualModeBtn.style.borderColor = '#ddd';
-      
+
       searchPanel.style.display = 'block';
       manualPanel.style.display = 'none';
     });
@@ -1206,12 +1701,12 @@ class WeatherLocationPlugin extends Plugin {
       manualModeBtn.style.background = '#1890ff';
       manualModeBtn.style.color = 'white';
       manualModeBtn.style.borderColor = '#1890ff';
-      
+
       searchModeBtn.classList.remove('active');
       searchModeBtn.style.background = 'white';
       searchModeBtn.style.color = '';
       searchModeBtn.style.borderColor = '#ddd';
-      
+
       manualPanel.style.display = 'block';
       searchPanel.style.display = 'none';
     });
@@ -1256,7 +1751,7 @@ class WeatherLocationPlugin extends Plugin {
         await this.saveConfig();
         this.updateFavoriteCitiesUI();
         showMessage(`已添加地点：${name}`);
-        
+
         // 清空输入框
         nameInput.value = '';
         latInput.value = '';
@@ -1317,6 +1812,14 @@ class WeatherLocationPlugin extends Plugin {
 - {{location.township}} - 乡镇/街道 (如: 章华镇)
 - {{location.street}} - 街道 (如: 人民路)
 - {{location.streetNumber}} - 门牌号 (如: 123号)
+- {{location.preciseAddress}} - 精确地址（高德地址 + 可靠小区/建筑信息）
+- {{location.nearestPlace}} - 附近地点（POI/AOI，带距离）
+- {{location.nearestPoiName}} - 最近 POI 名称
+- {{location.nearestPoiDistance}} - 最近 POI 距离
+- {{location.nearestAoiName}} - 最近 AOI/小区区域名称
+- {{location.nearestAoiDistance}} - 最近 AOI/小区区域距离
+- {{location.nearestRoadName}} - 最近道路名称
+- {{location.nearestRoadDistance}} - 最近道路距离
 - {{location.formatted_address}} - 标准化详细地址
 - {{location.country}} - 国家
 - {{location.lat}} - 纬度
@@ -1350,7 +1853,7 @@ class WeatherLocationPlugin extends Plugin {
         showMessage('无法获取位置信息。请检查：\n1. 网络连接是否正常\n2. 高德地图 Key 是否已配置\n3. 浏览器定位权限是否已开启');
         return null;
       }
-      
+
       const weather = await this.weatherService.getWeather(location.lat, location.lon);
       return weather;
     } catch (error) {
@@ -1456,7 +1959,7 @@ class WeatherLocationPlugin extends Plugin {
   private async insertTemplateToCurrentDoc() {
     const data = await this.getTemplateData();
     if (!data) return;
-    const content = this.templateEngine.render(this.config.template, data);
+    const content = this.renderConfiguredOutput(data);
     await this.insertContentToCurrentDoc(content);
   }
 
@@ -1482,7 +1985,7 @@ class WeatherLocationPlugin extends Plugin {
   private async insertTemplateAtBlock(blockId: string) {
     const data = await this.getTemplateData();
     if (!data) return;
-    const content = this.templateEngine.render(this.config.template, data);
+    const content = this.renderConfiguredOutput(data);
     await this.insertContentAtBlock(blockId, content);
   }
 
@@ -1493,40 +1996,48 @@ class WeatherLocationPlugin extends Plugin {
       `**温度**: ${weather.temperature}°C`,
       `**湿度**: ${weather.humidity}%`
     ];
-    
+
     if (weather.windDirection) {
       parts.push(`**风向**: ${weather.windDirection}`);
     }
-    
+
     if (weather.windPower) {
       parts.push(`**风力**: ${weather.windPower}`);
     }
-    
+
     parts.push(`**风速**: ${weather.windSpeed} m/s`);
-    
+
     return parts.join(' | ');
   }
 
   // 格式化位置内容
   private formatLocationContent(location: LocationData): string {
     const parts = [`**位置**: ${location.city}`];
-    
+
     if (location.region) {
       parts.push(`**区域**: ${location.region}`);
     }
-    
+
     if (location.district) {
       parts.push(`**区县**: ${location.district}`);
     }
-    
+
+    if (location.preciseAddress) {
+      parts.push(`**精确地址**: ${location.preciseAddress}`);
+    }
+
+    if (location.nearestPlace) {
+      parts.push(`**附近地点**: ${location.nearestPlace}`);
+    }
+
     if (location.formatted_address) {
       parts.push(`**详细地址**: ${location.formatted_address}`);
     }
-    
+
     if (location.country) {
       parts.push(`**国家**: ${location.country}`);
     }
-    
+
     return parts.join(' | ');
   }
 
@@ -1723,7 +2234,7 @@ class WeatherLocationPlugin extends Plugin {
 
   // 检测是否为移动端设备
   private isMobile(): boolean {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            window.innerWidth <= 768;
   }
 }

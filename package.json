@@ -4,8 +4,10 @@
   "description": "思源笔记天气和位置查询插件，支持模板自动插入到每日笔记",
   "main": "dist/index.js",
   "scripts": {
+    "build:helpers": "node scripts/build-helpers.js",
+    "install:helper": "npm run build:helpers && node scripts/install-helper.js",
     "dev": "vite build --watch",
-    "build": "vite build"
+    "build": "npm run build:helpers && vite build"
   },
   "keywords": [
     "siyuan",

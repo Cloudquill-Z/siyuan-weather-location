@@ -227,6 +227,14 @@ export class SettingTab {
 - {{location.township}} - 乡镇/街道 (如: 章华镇)
 - {{location.street}} - 街道 (如: 人民路)
 - {{location.streetNumber}} - 门牌号 (如: 123号)
+- {{location.preciseAddress}} - 精确地址（高德地址 + 可靠小区/建筑信息）
+- {{location.nearestPlace}} - 附近地点（POI/AOI，带距离）
+- {{location.nearestPoiName}} - 最近 POI 名称
+- {{location.nearestPoiDistance}} - 最近 POI 距离
+- {{location.nearestAoiName}} - 最近 AOI/小区区域名称
+- {{location.nearestAoiDistance}} - 最近 AOI/小区区域距离
+- {{location.nearestRoadName}} - 最近道路名称
+- {{location.nearestRoadDistance}} - 最近道路距离
 - {{location.formatted_address}} - 标准化详细地址
 - {{location.country}} - 国家
 - {{location.lat}} - 纬度
@@ -273,6 +281,8 @@ export class SettingTab {
 {{/if}}{{#if location.township}}🏘 **乡镇/街道**: {{location.township}}
 {{/if}}{{#if location.street}}🛣 **街道**: {{location.street}}
 {{/if}}{{#if location.streetNumber}}🔢 **门牌号**: {{location.streetNumber}}
+{{/if}}{{#if location.preciseAddress}}📌 **精确地址**: {{location.preciseAddress}}
+{{/if}}{{#if location.nearestPlace}}🏢 **附近地点**: {{location.nearestPlace}}
 {{/if}}{{#if location.formatted_address}}📝 **详细地址**: {{location.formatted_address}}
 {{/if}}{{#if location.country}}🌍 **国家**: {{location.country}}
 {{/if}}🌐 **坐标**: {{location.lat}}, {{location.lon}}
@@ -298,6 +308,11 @@ export class SettingTab {
 | 乡镇/街道 | {{location.township}} |
 | 街道 | {{location.street}} |
 | 门牌号 | {{location.streetNumber}} |
+| 精确地址 | {{location.preciseAddress}} |
+| 附近地点 | {{location.nearestPlace}} |
+| 最近 POI | {{location.nearestPoiName}} |
+| 最近 AOI | {{location.nearestAoiName}} |
+| 最近道路 | {{location.nearestRoadName}} |
 | 详细地址 | {{location.formatted_address}} |
 | 国家 | {{location.country}} |
 | 纬度 | {{location.lat}} |
