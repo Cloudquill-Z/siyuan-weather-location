@@ -1,5 +1,6 @@
 import {
-  DEFAULT_OUTPUT_CONFIG,
+  NEWLINE_CHIP,
+  OutputConfig,
   createDefaultOutputConfig,
   normalizeOutputConfig,
   renderOutputConfig
@@ -32,45 +33,97 @@ const data = {
   time: '2026/6/12 15:30:00'
 };
 
-const grouped = renderOutputConfig(DEFAULT_OUTPUT_CONFIG, data);
+// 1. 标签 + 符号的基本渲染
+const config: OutputConfig = {
+  chips: ['weather.description', 'weather.temperature', 'location.city'],
+  gaps: ['**天气**: ', ' | **温度**: ', '°C | **位置**: ', '']
+};
+const rendered = renderOutputConfig(config, data);
+assert(
+  rendered === '**天气**: 晴转多云 | **温度**: 28°C | **位置**: 岳阳市\n',
+  `unexpected render result: ${JSON.stringify(rendered)}`
+);
 
-assert(grouped.includes('## 今日天气与位置'), 'expected grouped output title');
-assert(grouped.includes('🌤 **天气状况**: 晴转多云'), 'expected weather description field');
-assert(grouped.includes('📍 **当前位置**: 岳阳市'), 'expected location city field');
-assert(grouped.includes('⏰ **记录时间**: 2026/6/12 15:30:00'), 'expected time field');
+// 2. 换行标签
+const multiline: OutputConfig = {
+  chips: ['weather.description', NEWLINE_CHIP, 'location.city'],
+  gaps: ['天气: ', '', '位置: ', '']
+};
+const multilineRendered = renderOutputConfig(multiline, data);
+assert(
+  multilineRendered === '天气: 晴转多云\n位置: 岳阳市\n',
+  `unexpected multiline result: ${JSON.stringify(multilineRendered)}`
+);
 
-const withoutHumidity = createDefaultOutputConfig();
-withoutHumidity.fields = withoutHumidity.fields.map(field => (
-  field.key === 'weather.humidity' ? { ...field, enabled: false } : field
-));
+// 3. 坐标字段由 lat/lon 组合
+const coordinates: OutputConfig = {
+  chips: ['location.coordinates'],
+  gaps: ['坐标: ', '']
+};
+assert(
+  renderOutputConfig(coordinates, data).includes('29.52, 112.55'),
+  'expected coordinates field to combine lat/lon'
+);
 
-const hiddenFieldOutput = renderOutputConfig(withoutHumidity, data);
-assert(!hiddenFieldOutput.includes('相对湿度'), 'expected disabled field to be omitted');
+// 4. 空数据字段渲染为空字符串，不影响两侧符号
+const emptyData = { weather: {}, location: {}, time: '' };
+const emptyRendered = renderOutputConfig(config, emptyData);
+assert(
+  emptyRendered === '**天气**:  | **温度**: °C | **位置**:\n',
+  `unexpected empty-data result: ${JSON.stringify(emptyRendered)}`
+);
 
-const tableConfig = createDefaultOutputConfig();
-tableConfig.style = 'table';
-tableConfig.fields = tableConfig.fields.map(field => ({
-  ...field,
-  enabled: ['weather.description', 'weather.temperature', 'location.city', 'time'].includes(field.key)
-}));
+// 5. 默认配置包含标题与换行
+const defaultRendered = renderOutputConfig(createDefaultOutputConfig(), data);
+assert(defaultRendered.includes('## 今日天气与位置'), 'expected default output title');
+assert(defaultRendered.includes('🌤 **天气状况**: 晴转多云'), 'expected default weather line');
+assert(defaultRendered.includes('⏰ **记录时间**: 2026/6/12 15:30:00'), 'expected default time line');
 
-const table = renderOutputConfig(tableConfig, data);
-assert(table.includes('| 项目 | 数值 |'), 'expected table header');
-assert(table.includes('| 天气状况 | 晴转多云 |'), 'expected weather row');
-assert(table.includes('| 当前位置 | 岳阳市 |'), 'expected location row');
-
-const reordered = createDefaultOutputConfig();
-const cityField = reordered.fields.find(field => field.key === 'location.city');
-const weatherField = reordered.fields.find(field => field.key === 'weather.description');
-if (!cityField || !weatherField) {
-  throw new Error('expected default fields to include city and weather');
-}
-
-const normalized = normalizeOutputConfig({
+// 6. 旧版 grouped 配置迁移
+const legacyGrouped = normalizeOutputConfig({
   style: 'grouped',
-  title: '顺序测试',
-  fields: [cityField, weatherField]
+  title: '我的天气',
+  fields: [
+    { key: 'weather.description', label: '天气', icon: '🌤', enabled: true },
+    { key: 'weather.humidity', label: '湿度', icon: '💧', enabled: false },
+    { key: 'location.city', label: '位置', icon: '📍', enabled: true }
+  ]
 });
+const migratedGrouped = renderOutputConfig(legacyGrouped, data);
+assert(migratedGrouped.includes('## 我的天气'), 'expected migrated title');
+assert(migratedGrouped.includes('🌤 **天气**: 晴转多云'), 'expected migrated weather line');
+assert(migratedGrouped.includes('📍 **位置**: 岳阳市'), 'expected migrated city line');
+assert(!migratedGrouped.includes('湿度'), 'expected disabled legacy field to be dropped');
 
-assert(normalized.fields[0].key === 'location.city', 'expected saved field order to be preserved');
-assert(normalized.fields[1].key === 'weather.description', 'expected second saved field order to be preserved');
+// 7. 旧版 compact 配置迁移
+const legacyCompact = normalizeOutputConfig({
+  style: 'compact',
+  title: '',
+  fields: [
+    { key: 'weather.description', label: '天气', icon: '', enabled: true },
+    { key: 'location.city', label: '位置', icon: '', enabled: true }
+  ]
+});
+const migratedCompact = renderOutputConfig(legacyCompact, data);
+assert(
+  migratedCompact === '**天气**: 晴转多云 | **位置**: 岳阳市\n',
+  `unexpected migrated compact result: ${JSON.stringify(migratedCompact)}`
+);
+
+// 8. 旧版高级模板无法迁移时回退到默认格式
+const legacyAdvanced = normalizeOutputConfig({ style: 'advanced' });
+assert(
+  renderOutputConfig(legacyAdvanced, data).includes('## 今日天气与位置'),
+  'expected advanced legacy config to fall back to default'
+);
+
+// 9. 新格式归一化：过滤未知标签并补齐 gaps 长度
+const normalized = normalizeOutputConfig({
+  chips: ['weather.description', 'not.a.field', NEWLINE_CHIP],
+  gaps: ['A: ']
+});
+assert(normalized.chips.length === 2, 'expected unknown chip to be filtered out');
+assert(normalized.gaps.length === normalized.chips.length + 1, 'expected gaps to be padded');
+assert(normalized.gaps[0] === 'A: ', 'expected existing gap to be preserved');
+
+console.log('output-config tests passed');

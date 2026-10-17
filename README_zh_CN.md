@@ -6,7 +6,7 @@
 
 - 🌤 **天气查询**: 通过高德地图 API 获取实时天气预报数据
 - 📍 **位置查询**: 通过浏览器定位 + 高德逆地理编码获取精确地址
-- 📝 **模板支持**: 可自定义模板，支持变量替换和条件语法
+- 📝 **可视化格式**: 字段标签点击/拖拽组合，符号自由输入，无需手写模板语法
 - ⚡ **斜杠命令**: 输入 `/tq` 或 `/天气位置` 快速插入；常用城市有独立快捷指令
 - ⭐ **常用城市**: 最多保存 5 个城市，支持拼音首字母快捷查询
 
@@ -39,87 +39,24 @@
 - **编辑/删除**: 在设置面板中修改城市信息或删除已保存的城市
 - **快捷指令格式**: `<前缀>tq`，如 `/bjtq` 查询北京天气
 
-### 模板设置
+### 输出格式
 
-插件支持自定义模板，可使用以下变量和条件语法：
+插件采用可视化方式设置输出格式，无需手写模板语法：
 
-#### 天气变量
-- `{{weather.description}}` - 全天天气描述（如：晴转多云、全天晴朗）
-- `{{weather.dayWeather}}` - 白天天气
-- `{{weather.nightWeather}}` - 夜间天气
-- `{{weather.temperature}}` - 当前温度（°C）
-- `{{weather.humidity}}` - 湿度（%）
-- `{{weather.windSpeed}}` - 风速（m/s）
-- `{{weather.windDirection}}` - 当前风向（如：北风、东南风）
-- `{{weather.windPower}}` - 当前风力等级（如：3级）
-- `{{weather.dayWindDirection}}` - 白天风向
-- `{{weather.nightWindDirection}}` - 夜间风向
-- `{{weather.dayWindPower}}` - 白天风力等级
-- `{{weather.nightWindPower}}` - 夜间风力等级
-- `{{weather.tempMin}}` - 最低温度（°C）
-- `{{weather.tempMax}}` - 最高温度（°C）
+- **字段标签**：天气、位置、时间等字段以标签形式呈现，点击标签即可加入格式，也可以把标签拖动到目标位置
+- **符号文本**：标签之间的输入框可填写任意符号或文字（如 `:`、`|`、`°C`、`**加粗**` 标记），随格式原样输出
+- **换行标签**：加入「换行」标签即可另起一行
+- **调整顺序**：直接拖动格式区中的标签即可重新排序，标签会携带其前面的符号一起移动
+- **实时预览**：格式编辑区下方实时显示输出效果
+- **恢复默认**：一键恢复默认输出格式
 
-#### 位置变量（按高德地图地址层级）
-- `{{location.province}}` - 省份（如：湖南省）
-- `{{location.city}}` - 城市（如：岳阳市）
-- `{{location.district}}` - 区县（如：华容县）
-- `{{location.township}}` - 乡镇/街道（如：章华镇）
-- `{{location.street}}` - 街道（如：人民路）
-- `{{location.streetNumber}}` - 门牌号（如：123号）
-- `{{location.preciseAddress}}` - 精确地址（高德地址 + 可靠小区/建筑信息）
-- `{{location.nearestPlace}}` - 附近地点（POI/AOI，带距离）
-- `{{location.nearestPoiName}}` - 最近 POI 名称
-- `{{location.nearestPoiDistance}}` - 最近 POI 距离
-- `{{location.nearestAoiName}}` - 最近 AOI/小区区域名称
-- `{{location.nearestAoiDistance}}` - 最近 AOI/小区区域距离
-- `{{location.nearestRoadName}}` - 最近道路名称
-- `{{location.nearestRoadDistance}}` - 最近道路距离
-- `{{location.formatted_address}}` - 标准化详细地址
-- `{{location.country}}` - 国家
-- `{{location.region}}` - 区域/省份（兼容旧版，建议使用 province）
-- `{{location.lat}}` - 纬度
-- `{{location.lon}}` - 经度
+#### 可用字段
 
-#### 条件语法
-模板引擎支持条件判断：
-```
-{{#if 变量名}}变量存在时显示的内容{{/if}}
-{{#if 变量名}}条件满足时{{else}}条件不满足时{{/if}}
-```
+天气：天气状况、白天天气、夜间天气、当前温度、相对湿度、风向、风力、风速、最低温度、最高温度
 
-#### 其他变量
-- `{{time}}` - 当前时间
+位置：当前位置、省份、区县、乡镇/街道、街道、门牌号、精确地址、附近地点、详细地址、国家、坐标
 
-### 默认模板
-
-```markdown
-## 今日天气与位置
-
-🌤 **天气状况**: {{weather.description}}
-{{#if weather.dayWeather}}☀️ **白天天气**: {{weather.dayWeather}}
-{{/if}}{{#if weather.nightWeather}}🌙 **夜间天气**: {{weather.nightWeather}}
-{{/if}}🌡 **当前温度**: {{weather.temperature}}°C
-💧 **相对湿度**: {{weather.humidity}}%
-🌬 **风向**: {{weather.windDirection}}
-💨 **风力**: {{weather.windPower}}
-📊 **风速**: {{weather.windSpeed}} m/s
-🔽 **最低温度**: {{weather.tempMin}}°C
-🔼 **最高温度**: {{weather.tempMax}}°C
-
-📍 **当前位置**: {{location.city}}
-{{#if location.province}}🏛 **省份**: {{location.province}}
-{{/if}}{{#if location.district}}🏙 **区县**: {{location.district}}
-{{/if}}{{#if location.township}}🏘 **乡镇/街道**: {{location.township}}
-{{/if}}{{#if location.street}}🛣 **街道**: {{location.street}}
-{{/if}}{{#if location.streetNumber}}🔢 **门牌号**: {{location.streetNumber}}
-{{/if}}{{#if location.preciseAddress}}📌 **精确地址**: {{location.preciseAddress}}
-{{/if}}{{#if location.nearestPlace}}🏢 **附近地点**: {{location.nearestPlace}}
-{{/if}}{{#if location.formatted_address}}📝 **详细地址**: {{location.formatted_address}}
-{{/if}}{{#if location.country}}🌍 **国家**: {{location.country}}
-{{/if}}🌐 **坐标**: {{location.lat}}, {{location.lon}}
-
-⏰ **记录时间**: {{time}}
-```
+其他：记录时间、换行
 
 ## 使用方法
 
@@ -136,39 +73,28 @@
 ### 设置面板功能
 - **测试按钮**: 测试数据获取，验证 API Key 和网络连通性
 - **清除缓存**: 清除缓存的天气和位置数据，下次请求将重新获取
-- **模板预设**: 一键切换默认、简洁、表格三种模板
+- **恢复默认格式**: 一键恢复默认的输出格式
 
-## 模板示例
+## 输出示例
 
-### 简洁模板
+默认格式输出效果：
+
 ```markdown
-**天气**: {{weather.description}} | **温度**: {{weather.temperature}}°C | **位置**: {{location.city}}
+## 今日天气与位置
+
+🌤 **天气状况**: 晴转多云
+🌡 **当前温度**: 28°C
+💧 **相对湿度**: 62%
+🌬 **风向**: 东南风
+💨 **风力**: 3级
+📍 **当前位置**: 岳阳市
+⏰ **记录时间**: 2026/6/12 15:30:00
 ```
 
-### 表格模板
+把字段标签排成一行、符号输入框填上 ` | `，即可得到单行简洁输出：
+
 ```markdown
-| 项目 | 数值 |
-|------|------|
-| 天气 | {{weather.description}} |
-| 温度 | {{weather.temperature}}°C |
-| 湿度 | {{weather.humidity}}% |
-| 风速 | {{weather.windSpeed}} m/s |
-| 位置 | {{location.city}} |
-| 时间 | {{time}} |
-```
-
-### 带条件的模板
-```markdown
-## 今日天气
-
-🌤 **天气**: {{weather.description}}
-🌡 **温度**: {{weather.temperature}}°C
-{{#if weather.dayWeather}}☀️ **白天**: {{weather.dayWeather}}
-{{/if}}{{#if weather.nightWeather}}🌙 **夜间**: {{weather.nightWeather}}
-{{/if}}💧 **湿度**: {{weather.humidity}}%
-
-📍 **位置**: {{location.city}}
-⏰ **时间**: {{time}}
+**天气**: 晴转多云 | **温度**: 28°C | **位置**: 岳阳市
 ```
 
 ## 注意事项

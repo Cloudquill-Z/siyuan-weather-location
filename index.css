@@ -166,46 +166,142 @@
     font-size: 13px;
 }
 
-#weather-location-settings .wl-builder {
-    display: grid;
-    grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
-    gap: 16px;
+#weather-location-settings .wl-format-help {
+    margin-bottom: 10px;
 }
 
-#weather-location-settings .wl-field-list {
-    display: grid;
-    gap: 8px;
+#weather-location-settings .wl-format-help code {
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--b3-theme-surface);
+    font-family: var(--b3-font-family-code), monospace;
+    font-size: 12px;
 }
 
-#weather-location-settings .wl-field-row {
-    display: grid;
-    grid-template-columns: 44px minmax(96px, 1fr) minmax(110px, 0.8fr) 32px 32px;
-    gap: 8px;
+#weather-location-settings .wl-composer {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    padding: 8px;
+    gap: 4px;
+    min-height: 56px;
+    padding: 10px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-background);
+}
+
+#weather-location-settings .wl-composer:focus-within {
+    border-color: var(--b3-theme-primary);
+}
+
+#weather-location-settings .wl-gap-input {
+    width: 4ch;
+    min-width: 3ch;
+    padding: 4px 2px;
+    border: 0;
+    border-bottom: 1px dashed var(--b3-border-color);
+    border-radius: 0;
+    background: transparent;
+    color: var(--b3-theme-on-background);
+    font-family: var(--b3-font-family-code), monospace;
+    font-size: 13px;
+    text-align: center;
+}
+
+#weather-location-settings .wl-gap-input::placeholder {
+    color: var(--b3-theme-on-surface-light);
+    opacity: 0.6;
+}
+
+#weather-location-settings .wl-gap-input:focus {
+    outline: none;
+    border-bottom-color: var(--b3-theme-primary);
+}
+
+#weather-location-settings .wl-gap-input--drop {
+    border-bottom: 2px solid var(--b3-theme-primary);
+    background: var(--b3-theme-surface);
+}
+
+#weather-location-settings .wl-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 999px;
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: grab;
+    user-select: none;
+}
+
+#weather-location-settings .wl-chip--newline {
+    border-style: dashed;
+    color: var(--b3-theme-on-surface-light);
+}
+
+#weather-location-settings .wl-chip__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+#weather-location-settings .wl-chip__remove:hover {
+    background: var(--b3-theme-error);
+    color: #fff;
+}
+
+#weather-location-settings .wl-palette {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px;
     border: 1px solid var(--b3-border-color);
     border-radius: 8px;
     background: var(--b3-theme-surface);
 }
 
-#weather-location-settings .wl-field-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    margin: 0;
-}
-
-#weather-location-settings .wl-field-key {
-    overflow: hidden;
+#weather-location-settings .wl-palette__label {
+    margin-bottom: 6px;
     color: var(--b3-theme-on-surface-light);
     font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-weight: 600;
+}
+
+#weather-location-settings .wl-palette__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#weather-location-settings .wl-chip--palette {
+    background: var(--b3-theme-background);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+#weather-location-settings .wl-chip--palette:hover {
+    border-color: var(--b3-theme-primary);
+    color: var(--b3-theme-primary);
 }
 
 #weather-location-settings .wl-preview {
     min-width: 0;
+    margin-top: 12px;
     border: 1px solid var(--b3-border-color);
     border-radius: 8px;
     background: var(--b3-theme-surface);
@@ -421,18 +517,11 @@
         max-height: 80vh !important;
     }
 
-    #weather-location-settings .wl-builder {
-        grid-template-columns: 1fr;
+    #weather-location-settings .wl-chip {
+        font-size: 12px !important;
+        padding: 4px 6px !important;
     }
 
-    #weather-location-settings .wl-field-row {
-        grid-template-columns: 40px minmax(0, 1fr) 32px 32px;
-    }
-
-    #weather-location-settings .wl-field-key {
-        display: none;
-    }
-    
     #weather-location-settings .setting-section {
         margin-bottom: 16px !important;
         padding-bottom: 16px !important;
@@ -473,4 +562,174 @@
     #weather-location-settings .setting-actions button:nth-child(3) {
         min-width: 100% !important;
     }
+}
+
+/* “插入天气”弹窗样式 - 限定在弹窗容器内 */
+#weather-insert-dialog.wl-insert {
+    padding: 16px;
+    max-height: 70vh;
+    overflow-y: auto;
+    color: var(--b3-theme-on-background);
+    background: var(--b3-theme-background);
+}
+
+#weather-insert-dialog .wl-settings__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 16px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-surface);
+}
+
+#weather-insert-dialog .wl-settings__tab {
+    min-height: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--b3-theme-on-surface);
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#weather-insert-dialog .wl-settings__tab.is-active {
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-primary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+#weather-insert-dialog .wl-insert__page {
+    display: none;
+}
+
+#weather-insert-dialog .wl-insert__page.is-active {
+    display: block;
+}
+
+#weather-insert-dialog .wl-insert__hint {
+    margin-bottom: 16px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+#weather-insert-dialog .setting-item {
+    margin-bottom: 12px;
+}
+
+#weather-insert-dialog .setting-item label {
+    display: block;
+    margin: 10px 0 6px;
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#weather-insert-dialog input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+#weather-insert-dialog input:focus {
+    outline: 2px solid rgba(53, 128, 245, 0.2);
+    border-color: var(--b3-theme-primary);
+}
+
+#weather-insert-dialog .wl-search-wrap {
+    position: relative;
+}
+
+#weather-insert-dialog #wl-insert-city-results {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--b3-border-color);
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+    background: var(--b3-theme-background);
+}
+
+#weather-insert-dialog .city-search-result:hover {
+    background: var(--b3-list-hover);
+}
+
+#weather-insert-dialog .wl-insert__divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 10px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+}
+
+#weather-insert-dialog .wl-insert__divider::before,
+#weather-insert-dialog .wl-insert__divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--b3-border-color);
+}
+
+#weather-insert-dialog .wl-insert__coords {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+#weather-insert-dialog #wl-insert-local-btn,
+#weather-insert-dialog #wl-insert-custom-btn {
+    width: 100%;
+    margin-top: 8px;
+}
+
+#weather-insert-dialog .wl-insert__empty {
+    padding: 16px 10px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 13px;
+    text-align: center;
+}
+
+#weather-insert-dialog .wl-insert__city {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    background: var(--b3-theme-surface);
+}
+
+#weather-insert-dialog .wl-insert__city-info {
+    flex: 1;
+    min-width: 0;
+}
+
+#weather-insert-dialog .wl-insert__city-name {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+#weather-insert-dialog .wl-insert__city-coords {
+    margin-top: 2px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+}
+
+#weather-insert-dialog .wl-insert__city-btn {
+    flex-shrink: 0;
 }

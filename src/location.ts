@@ -186,8 +186,34 @@ export class LocationService {
 
     console.log('[LocationService] 获取真实坐标成功:', coordinates);
 
-    // 高德逆地理编码获取详细地址
-    const regeoUrl = `https://restapi.amap.com/v3/geocode/regeo?key=${this.config.amapKey}&location=${coordinates.lon},${coordinates.lat}&extensions=all&radius=1000&roadlevel=0&homeorcorp=1`;
+    return this.reverseGeocode(coordinates.lat, coordinates.lon, {
+      accuracy: coordinates.accuracy,
+      timestamp: coordinates.timestamp,
+      source: coordinates.source || 'gps'
+    });
+  }
+
+  // 通过高德逆地理编码获取任意坐标的位置信息（供手动输入经纬度/搜索地点使用）
+  async getLocationByCoordinates(lat: number, lon: number): Promise<LocationData> {
+    if (!this.config.amapKey) {
+      throw new Error('未配置高德地图 API Key，请在插件设置中配置');
+    }
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      throw new Error('经纬度无效');
+    }
+
+    return this.reverseGeocode(lat, lon, { source: 'gps' });
+  }
+
+  // 高德逆地理编码获取详细地址
+  private async reverseGeocode(
+    lat: number,
+    lon: number,
+    extra: { accuracy?: number; timestamp?: number; source: LocationData['source'] }
+  ): Promise<LocationData> {
+    const coordinates = { lat, lon, accuracy: extra.accuracy, timestamp: extra.timestamp, source: extra.source };
+    const regeoUrl = `https://restapi.amap.com/v3/geocode/regeo?key=${this.config.amapKey}&location=${lon},${lat}&extensions=all&radius=1000&roadlevel=0&homeorcorp=1`;
     console.log('[LocationService] 调用高德逆地理编码API...');
     const regeoResponse = await this.fetchWithTimeout(regeoUrl, 5000);
     const regeoData = await regeoResponse.json();
