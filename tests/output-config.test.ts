@@ -15,6 +15,8 @@ function assert(condition: unknown, message: string) {
 const data = {
   weather: {
     description: '晴转多云',
+    dayWeather: '晴',
+    nightWeather: '多云',
     temperature: 28,
     humidity: 62,
     windDirection: '东南风',
@@ -27,6 +29,7 @@ const data = {
     province: '湖南省',
     district: '华容县',
     preciseAddress: '湖南省岳阳市华容县章华镇',
+    formatted_address: '湖南省岳阳市华容县章华镇人民路88号',
     lat: 29.52,
     lon: 112.55
   },
@@ -73,11 +76,15 @@ assert(
   `unexpected empty-data result: ${JSON.stringify(emptyRendered)}`
 );
 
-// 5. 默认配置包含标题与换行
+// 5. 默认配置：第一行地址，第二行天气/温度/湿度/风向/风力用 · 连接（软换行，单块）
 const defaultRendered = renderOutputConfig(createDefaultOutputConfig(), data);
-assert(defaultRendered.includes('## 今日天气与位置'), 'expected default output title');
-assert(defaultRendered.includes('🌤 **天气状况**: 晴转多云'), 'expected default weather line');
-assert(defaultRendered.includes('⏰ **记录时间**: 2026/6/12 15:30:00'), 'expected default time line');
+assert(
+  defaultRendered ===
+    '湖南省岳阳市华容县章华镇人民路88号\n' +
+    '晴转多云 · 22～31°C · 湿度: 62% · 东南风 · 3级\n',
+  `unexpected default render result: ${JSON.stringify(defaultRendered)}`
+);
+assert(!defaultRendered.includes('\n\n'), 'expected default output to stay in a single block (no blank lines)');
 
 // 6. 旧版 grouped 配置迁移
 const legacyGrouped = normalizeOutputConfig({
@@ -90,10 +97,11 @@ const legacyGrouped = normalizeOutputConfig({
   ]
 });
 const migratedGrouped = renderOutputConfig(legacyGrouped, data);
-assert(migratedGrouped.includes('## 我的天气'), 'expected migrated title');
+assert(migratedGrouped.includes('**我的天气**'), 'expected migrated title');
 assert(migratedGrouped.includes('🌤 **天气**: 晴转多云'), 'expected migrated weather line');
 assert(migratedGrouped.includes('📍 **位置**: 岳阳市'), 'expected migrated city line');
 assert(!migratedGrouped.includes('湿度'), 'expected disabled legacy field to be dropped');
+assert(!migratedGrouped.includes('\n\n'), 'expected migrated output to stay in a single block');
 
 // 7. 旧版 compact 配置迁移
 const legacyCompact = normalizeOutputConfig({
@@ -113,7 +121,7 @@ assert(
 // 8. 旧版高级模板无法迁移时回退到默认格式
 const legacyAdvanced = normalizeOutputConfig({ style: 'advanced' });
 assert(
-  renderOutputConfig(legacyAdvanced, data).includes('## 今日天气与位置'),
+  renderOutputConfig(legacyAdvanced, data) === defaultRendered,
   'expected advanced legacy config to fall back to default'
 );
 
@@ -125,5 +133,21 @@ const normalized = normalizeOutputConfig({
 assert(normalized.chips.length === 2, 'expected unknown chip to be filtered out');
 assert(normalized.gaps.length === normalized.chips.length + 1, 'expected gaps to be padded');
 assert(normalized.gaps[0] === 'A: ', 'expected existing gap to be preserved');
+
+// 10. 连续换行标签折叠为单个软换行（updateBlock 只能写入一个块，空行会切分块）
+const consecutiveNewlines: OutputConfig = {
+  chips: ['weather.description', NEWLINE_CHIP, NEWLINE_CHIP, 'location.city'],
+  gaps: ['天气: ', '', '', '位置: ', '']
+};
+const consecutiveRendered = renderOutputConfig(consecutiveNewlines, data);
+assert(
+  consecutiveRendered === '天气: 晴转多云\n位置: 岳阳市\n',
+  `unexpected consecutive-newline result: ${JSON.stringify(consecutiveRendered)}`
+);
+assert(!consecutiveRendered.includes('\n\n'), 'expected consecutive newlines to collapse');
+
+// 11. 空配置渲染为空内容（清空格式后不会报错）
+const emptyConfig = renderOutputConfig({ chips: [], gaps: [''] }, data);
+assert(emptyConfig === '\n', `unexpected empty-config result: ${JSON.stringify(emptyConfig)}`);
 
 console.log('output-config tests passed');

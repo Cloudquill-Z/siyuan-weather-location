@@ -4,6 +4,11 @@
 //   gaps[0] + chips[0] + gaps[1] + chips[1] + ... + gaps[n]
 // chips 中的字段标签渲染为对应的数据值，NEWLINE_CHIP 渲染为换行，
 // gaps 中的符号文本原样输出（如 " | "、"**天气**: "、"°C"）。
+//
+// 重要约束：斜杠命令通过 updateBlock 写入内容，思源一次只能更新一个块，
+// 多行 Markdown（空行 \n\n、标题等块级语法）会被截断导致插入失败。
+// 因此 NEWLINE_CHIP 渲染为「软换行」（单个 \n，等同编辑器中的 Shift+Enter），
+// 渲染结果会被收敛为单个段落块：连续换行折叠为一个，且不应使用块级语法。
 
 export const NEWLINE_CHIP = '__newline__';
 
@@ -75,42 +80,35 @@ function defaultUnitSuffix(key: string): string {
 
 export const DEFAULT_OUTPUT_CONFIG: OutputConfig = createDefaultOutputConfig();
 
+// 默认格式：两行结构，软换行（Shift+Enter 效果），整个输出为单个块
+//   湖南省长沙市长沙县榔梨街道黄兴大道南段52号
+//   多云转小雨 · 22～32°C · 湿度: 47% · 南风 · 5级
 export function createDefaultOutputConfig(): OutputConfig {
-  return buildConfig('## 今日天气与位置', [
-    'weather.description',
-    'weather.temperature',
-    'weather.humidity',
-    'weather.windDirection',
-    'weather.windPower',
-    'location.city',
-    'time'
-  ]);
-}
-
-// 由标题 + 字段 key 列表构造「每行一个字段」的默认格式
-function buildConfig(title: string, keys: string[]): OutputConfig {
-  const chips: OutputChip[] = [];
-  const gaps: string[] = [];
-
-  if (title) {
-    gaps.push(title);
-    chips.push(NEWLINE_CHIP);
-    gaps.push('');
-    chips.push(NEWLINE_CHIP);
-  }
-
-  keys.forEach(key => {
-    const meta = getFieldMeta(key);
-    gaps.push(meta ? `${meta.icon} **${meta.label}**: ` : '');
-    chips.push(key);
-    gaps.push(defaultUnitSuffix(key));
-    chips.push(NEWLINE_CHIP);
-  });
-
-  // 末尾换行标签后面的符号为空
-  gaps.push('');
-
-  return { chips, gaps };
+  return {
+    chips: [
+      'location.formatted_address',
+      NEWLINE_CHIP,
+      'weather.dayWeather',
+      'weather.nightWeather',
+      'weather.tempMin',
+      'weather.tempMax',
+      'weather.humidity',
+      'weather.windDirection',
+      'weather.windPower'
+    ],
+    gaps: [
+      '',
+      '',
+      '',
+      '转',
+      ' · ',
+      '～',
+      '°C · 湿度: ',
+      '% · ',
+      ' · ',
+      ''
+    ]
+  };
 }
 
 export function normalizeOutputConfig(value: unknown): OutputConfig {
@@ -184,9 +182,8 @@ function migrateLegacyConfig(input: Record<string, unknown>): OutputConfig | nul
   const gaps: string[] = [];
 
   if (style === 'grouped' && title) {
-    gaps.push(`## ${title}`);
-    chips.push(NEWLINE_CHIP);
-    gaps.push('');
+    // 迁移时同样避免标题块/空行，保证输出为单个块
+    gaps.push(`**${title}**`);
     chips.push(NEWLINE_CHIP);
   }
 
@@ -209,6 +206,10 @@ export function renderOutputConfig(config: OutputConfig, data: any): string {
     output += chip === NEWLINE_CHIP ? '\n' : formatFieldValue(chip, data);
     output += normalized.gaps[index + 1] || '';
   });
+
+  // 单块约束：连续换行（空行）会在思源中切分出新的块，
+  // updateBlock 只能写入一个块，因此折叠为单个软换行（Shift+Enter 效果）。
+  output = output.replace(/\n{2,}/g, '\n');
 
   return output.trimEnd() + '\n';
 }

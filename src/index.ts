@@ -30,6 +30,7 @@ interface CitySearchResult {
   lon: number;
   displayName: string;
   address: string;
+  badge?: string; // POI 类型徽标，如「小区」「写字楼」
 }
 
 // 常用汉字拼音首字母映射表（基于实际拼音，处理多音字）
@@ -526,43 +527,38 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 创建“插入天气”弹窗内容
+  // 创建“插入天气”弹窗内容（紧凑单页布局：当地天气 / 搜索与经纬度 / 常用地点）
   private createWeatherInsertContent(): string {
     return `
       <div id="weather-insert-dialog" class="wl-insert">
-        <div class="wl-settings__tabs" role="tablist">
-          <button class="wl-settings__tab is-active" data-insert-page="local" type="button">当地天气</button>
-          <button class="wl-settings__tab" data-insert-page="custom" type="button">城市或经纬度</button>
-          <button class="wl-settings__tab" data-insert-page="favorite" type="button">常用地点</button>
+        <div class="wl-insert__local">
+          <div class="wl-insert__local-info">
+            <div class="wl-insert__local-title">📍 当地天气</div>
+            <div class="wl-insert__local-hint">插入当前定位地点的天气与位置</div>
+          </div>
+          <button id="wl-insert-local-btn" class="b3-button b3-button--primary" type="button">🌤 插入当地天气</button>
         </div>
 
-        <div class="wl-insert__page is-active" data-page="local">
-          <div class="wl-insert__hint">获取当前定位地点的天气与位置信息，并按当前输出配置插入到文档中。</div>
-          <button id="wl-insert-local-btn" class="b3-button b3-button--primary" type="button">插入当地天气</button>
+        <div class="wl-insert__separator"></div>
+
+        <div class="wl-search-wrap">
+          <input type="text" id="wl-insert-city-search" placeholder="🔍 搜索城市、区县、小区、写字楼…">
+          <div id="wl-insert-city-results"></div>
         </div>
 
-        <div class="wl-insert__page" data-page="custom">
-          <div class="setting-item">
-            <label>城市名称搜索</label>
-            <div class="wl-search-wrap">
-              <input type="text" id="wl-insert-city-search" placeholder="输入城市、区县或地点名称">
-              <div id="wl-insert-city-results"></div>
-            </div>
-          </div>
-          <div class="wl-insert__divider">或直接输入经纬度（填写后将优先使用）</div>
-          <div class="wl-insert__coords">
-            <input type="text" id="wl-insert-lat" placeholder="纬度，如 39.9042">
-            <input type="text" id="wl-insert-lon" placeholder="经度，如 116.4074">
-          </div>
-          <div class="setting-item">
-            <label>地点名称（可选）</label>
-            <input type="text" id="wl-insert-name" placeholder="留空则通过高德逆地理自动获取">
-          </div>
-          <button id="wl-insert-custom-btn" class="b3-button b3-button--primary" type="button">插入该地点天气</button>
+        <div class="wl-insert__row">
+          <input type="text" id="wl-insert-lat" placeholder="纬度，如 29.52">
+          <input type="text" id="wl-insert-lon" placeholder="经度，如 112.55">
+          <input type="text" id="wl-insert-name" placeholder="名称（可选）">
+          <button id="wl-insert-custom-btn" class="b3-button b3-button--primary" type="button">插入</button>
         </div>
+        <div class="wl-insert__hint">支持搜索<b>小区、商场、写字楼</b>等详细地点；手动填经纬度时优先使用经纬度。</div>
 
-        <div class="wl-insert__page" data-page="favorite">
-          <div id="wl-insert-favorite-list">
+        <div class="wl-insert__separator"></div>
+
+        <div class="wl-insert__fav">
+          <span class="wl-insert__fav-label">⭐ 常用</span>
+          <div class="wl-insert__fav-chips" id="wl-insert-favorite-list">
             ${this.renderInsertFavoriteList()}
           </div>
         </div>
@@ -570,41 +566,30 @@ class WeatherLocationPlugin extends Plugin {
     `;
   }
 
-  // 渲染“插入天气”弹窗中的常用地点列表
+  // 渲染“插入天气”弹窗中的常用地点标签（点击即插入）
   private renderInsertFavoriteList(): string {
     if (this.config.favoriteCities.length === 0) {
-      return '<div class="wl-insert__empty">暂无常用地点，可先在插件设置中添加</div>';
+      return '<span class="wl-insert__empty">暂无常用地点，可先在插件设置中添加</span>';
     }
 
-    return this.config.favoriteCities.map((city, index) => `
-      <div class="wl-insert__city">
-        <div class="wl-insert__city-info">
-          <div class="wl-insert__city-name">${this.escapeHtml(city.name)}</div>
-          <div class="wl-insert__city-coords">${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}</div>
-        </div>
-        <button class="wl-insert__city-btn b3-button b3-button--outline" data-index="${index}" type="button">插入</button>
-      </div>
-    `).join('');
+    return this.config.favoriteCities.map((city, index) => {
+      const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
+      const tooltip = `${city.address || city.name}\n${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}`;
+      return `
+        <button class="wl-insert__fav-chip" data-index="${index}" type="button" title="${this.escapeAttribute(tooltip)}">
+          ${this.escapeHtml(city.name)}${pinyinPrefix ? `<span class="wl-insert__fav-cmd">/${this.escapeHtml(pinyinPrefix)}tq</span>` : ''}
+        </button>
+      `;
+    }).join('');
   }
 
-  // 绑定“插入天气”弹窗事件
+  // 绑定“插入天气”弹窗事件（单页布局，无页签）
   private bindWeatherInsertEvents(dialog: any, blockId: string, triggers: string[]) {
     const container = document.getElementById('weather-insert-dialog');
     if (!container) {
       console.error('[WeatherLocation] Weather insert dialog container not found');
       return;
     }
-
-    // 页签切换
-    container.querySelectorAll<HTMLElement>('[data-insert-page]').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const page = tab.dataset.insertPage;
-        container.querySelectorAll('.wl-settings__tab').forEach(item => item.classList.remove('is-active'));
-        container.querySelectorAll('.wl-insert__page').forEach(item => item.classList.remove('is-active'));
-        tab.classList.add('is-active');
-        container.querySelector(`[data-page="${page}"]`)?.classList.add('is-active');
-      });
-    });
 
     // 1. 当地天气
     container.querySelector('#wl-insert-local-btn')?.addEventListener('click', async () => {
@@ -709,10 +694,10 @@ class WeatherLocationPlugin extends Plugin {
       );
     });
 
-    // 3. 常用地点
+    // 3. 常用地点（点击标签即插入）
     const favoriteList = container.querySelector('#wl-insert-favorite-list');
     favoriteList?.addEventListener('click', async (e) => {
-      const btn = (e.target as HTMLElement).closest('.wl-insert__city-btn') as HTMLElement;
+      const btn = (e.target as HTMLElement).closest('.wl-insert__fav-chip') as HTMLElement;
       if (!btn) return;
       const index = parseInt(btn.dataset.index || '0');
       const city = this.config.favoriteCities[index];
@@ -820,10 +805,10 @@ class WeatherLocationPlugin extends Plugin {
               <div id="search-city-panel">
                 <label>搜索地点</label>
                 <div class="wl-search-wrap">
-                  <input type="text" id="favorite-city-search" placeholder="输入城市、区县、街道或小区">
+                  <input type="text" id="favorite-city-search" placeholder="输入城市、区县、小区、写字楼…">
                   <div id="city-search-results"></div>
                 </div>
-                <div class="setting-help">支持高德地点搜索，城市、区县、街道和具体小区都可以添加</div>
+                <div class="setting-help">支持搜索城市、区县以及小区、商场、写字楼等详细地点，点击结果即可添加</div>
               </div>
 
               <div id="manual-city-panel" style="display: none;">
@@ -852,7 +837,7 @@ class WeatherLocationPlugin extends Plugin {
 
           <div class="setting-section">
             <h3>输出格式</h3>
-            <div class="setting-help wl-format-help">点击下方字段标签即可加入格式，也可以拖动标签调整顺序；标签之间的输入框可填写任意符号或文字（如 <code>:</code>、<code>|</code>、<code>°C</code>），「换行」标签用于另起一行。</div>
+            <div class="setting-help wl-format-help">点击下方字段标签即可加入格式，也可以拖动标签调整顺序；标签之间的输入框可填写任意符号或文字（如 <code>:</code>、<code>|</code>、<code>°C</code>），输入框会随内容自动变宽。「换行」标签以软换行（Shift+Enter 效果）另起一行，全部内容始终保持在同一个块中。</div>
             <div id="wl-format-composer" class="wl-composer" aria-label="输出格式编辑区"></div>
             <div class="wl-palette">
               <div class="wl-palette__group">
@@ -867,7 +852,7 @@ class WeatherLocationPlugin extends Plugin {
                 <div class="wl-palette__label">其他</div>
                 <div class="wl-palette__chips">
                   ${this.renderPaletteChips('time')}
-                  <button class="wl-chip wl-chip--newline wl-chip--palette" data-palette-chip="${NEWLINE_CHIP}" draggable="true" type="button" title="插入换行">⏎ 换行</button>
+                  <button class="wl-chip wl-chip--newline wl-chip--palette" data-palette-chip="${NEWLINE_CHIP}" draggable="true" type="button" title="插入软换行（Shift+Enter 效果，内容保持在同一个块中）">⏎ 换行</button>
                 </div>
               </div>
             </div>
@@ -877,6 +862,7 @@ class WeatherLocationPlugin extends Plugin {
             </div>
             <div class="wl-action-row">
               <button id="format-reset-btn" class="b3-button b3-button--outline" type="button">恢复默认格式</button>
+              <button id="format-clear-btn" class="b3-button b3-button--outline wl-danger" type="button">清空格式</button>
             </div>
           </div>
 
@@ -977,8 +963,15 @@ class WeatherLocationPlugin extends Plugin {
   // 让符号输入框宽度跟随内容
   private resizeGapInputs(root: ParentNode) {
     root.querySelectorAll<HTMLInputElement>('.wl-gap-input').forEach(input => {
-      input.style.width = `${Math.max(3, input.value.length + 1)}ch`;
+      this.autoSizeGapInput(input);
     });
+  }
+
+  // 按实际渲染宽度调整输入框（中文等宽字符也能正确撑开，不再是固定小框）
+  private autoSizeGapInput(input: HTMLInputElement) {
+    const MIN_WIDTH = 56; // px，保证空输入框也有可点击的录入区域
+    input.style.width = '0px';
+    input.style.width = `${Math.max(input.scrollWidth, MIN_WIDTH)}px`;
   }
 
   private renderOutputPreview(): string {
@@ -1133,7 +1126,7 @@ class WeatherLocationPlugin extends Plugin {
       }
 
       this.config.outputConfig.gaps[index] = input.value;
-      input.style.width = `${Math.max(3, input.value.length + 1)}ch`;
+      this.autoSizeGapInput(input);
       this.updateOutputPreview();
     });
 
@@ -1219,6 +1212,22 @@ class WeatherLocationPlugin extends Plugin {
       this.config.outputConfig = createDefaultOutputConfig();
       this.refreshComposer();
       showMessage('已恢复默认输出格式');
+    });
+
+    // 清空格式：一键移除所有标签与符号文本
+    container.querySelector('#format-clear-btn')?.addEventListener('click', () => {
+      const { chips, gaps } = this.config.outputConfig;
+      const hasContent = chips.length > 0 || gaps.some(gap => gap.trim().length > 0);
+      if (!hasContent) {
+        showMessage('输出格式已经是空的');
+        return;
+      }
+      if (!window.confirm('确定要清空输出格式的所有内容吗？清空后可通过「恢复默认格式」还原。')) {
+        return;
+      }
+      this.config.outputConfig = { chips: [], gaps: [''] };
+      this.refreshComposer();
+      showMessage('输出格式已清空');
     });
   }
 
@@ -1586,7 +1595,8 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 搜索地点（高德地图）
+  // 搜索地点（高德地图）：双接口并行——输入提示（POI 级，支持小区/写字楼等）
+  // 与地理编码（城市/区县/标准地址），合并去重后返回
   private async searchCities(query: string): Promise<CitySearchResult[]> {
     if (!query || query.length < 2) {
       return [];
@@ -1599,58 +1609,127 @@ class WeatherLocationPlugin extends Plugin {
       throw new Error('未配置高德地图 Key，无法搜索地点');
     }
 
-    const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(query)}&key=${amapKey}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    let geocodeError: Error | null = null;
+    let tipsError: Error | null = null;
+    const [geocodes, tips] = await Promise.all([
+      this.searchAmapGeocode(query, amapKey).catch((error: Error) => { geocodeError = error; return []; }),
+      this.searchAmapInputTips(query, amapKey).catch((error: Error) => { tipsError = error; return []; })
+    ]);
 
-    const response = await fetch(url, {
-      signal: controller.signal
-    });
+    if (geocodeError && tipsError) {
+      throw geocodeError;
+    }
+    if (geocodeError) console.warn('[WeatherLocation] 地理编码搜索失败，仅使用 POI 结果:', geocodeError);
+    if (tipsError) console.warn('[WeatherLocation] POI 搜索失败，仅使用地理编码结果:', tipsError);
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`高德地图 API 请求失败: ${response.status}`);
+    // 地理编码结果（城市/地址级）在前，POI 结果（小区/楼宇等）在后
+    const seen = new Set<string>();
+    const results: CitySearchResult[] = [];
+    for (const item of [...geocodes, ...tips]) {
+      if (!item.name || Number.isNaN(item.lat) || Number.isNaN(item.lon)) {
+        continue;
+      }
+      const key = `${item.name}-${item.lat.toFixed(5)}-${item.lon.toFixed(5)}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      results.push(item);
+      if (results.length >= 10) {
+        break;
+      }
     }
 
-    const data = await response.json();
-    console.log('[WeatherLocation] 高德地图返回数据:', data);
-
-    if (data.status !== '1') {
-      throw new Error(data.info || '搜索失败');
-    }
-
-    if (!data.geocodes || data.geocodes.length === 0) {
+    console.log('[WeatherLocation] 搜索结果:', results);
+    if (results.length === 0) {
       showMessage('未找到匹配的地点');
+    }
+    return results;
+  }
+
+  // 高德地理编码：城市、区县、标准地址
+  private async searchAmapGeocode(query: string, amapKey: string): Promise<CitySearchResult[]> {
+    const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(query)}&key=${amapKey}`;
+    const data = await this.fetchAmapJson(url);
+    console.log('[WeatherLocation] 高德地理编码返回数据:', data);
+
+    if (!Array.isArray(data.geocodes)) {
       return [];
     }
 
-    const seen = new Set<string>();
-    const results = data.geocodes.map((item: any) => {
+    return data.geocodes.map((item: any) => {
       const displayName = item.formatted_address || item.district || item.city || item.province || query;
-      const locationName = displayName || query;
       const [lonText, latText] = String(item.location || '').split(',');
       return {
-        name: locationName,
+        name: displayName || query,
         lat: parseFloat(latText),
         lon: parseFloat(lonText),
         displayName,
         address: displayName
       };
-    }).filter((item: CitySearchResult) => {
-      if (!item.name || Number.isNaN(item.lat) || Number.isNaN(item.lon)) {
-        return false;
-      }
-      const key = `${item.name}-${item.lat.toFixed(6)}-${item.lon.toFixed(6)}`;
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
     });
+  }
 
-    console.log('[WeatherLocation] 搜索结果:', results);
-    return results;
+  // 高德输入提示：POI 级联想，支持小区、商场、写字楼等详细地点
+  private async searchAmapInputTips(query: string, amapKey: string): Promise<CitySearchResult[]> {
+    const url = `https://restapi.amap.com/v3/assistant/inputtips?keywords=${encodeURIComponent(query)}&key=${amapKey}&datatype=poi`;
+    const data = await this.fetchAmapJson(url);
+    console.log('[WeatherLocation] 高德输入提示返回数据:', data);
+
+    if (!Array.isArray(data.tips)) {
+      return [];
+    }
+
+    return data.tips.map((item: any) => {
+      const [lonText, latText] = String(item.location || '').split(',');
+      // 无结果时高德的 district/address 可能是空数组而不是字符串
+      const district = typeof item.district === 'string' ? item.district : '';
+      const address = typeof item.address === 'string' ? item.address : '';
+      const displayName = `${district}${address}` || district || String(item.name || '');
+      return {
+        name: String(item.name || ''),
+        lat: parseFloat(latText),
+        lon: parseFloat(lonText),
+        displayName,
+        address: displayName || String(item.name || ''),
+        badge: this.getAmapTypeBadge(String(item.typecode || ''))
+      };
+    });
+  }
+
+  // 高德 POI 类型码 → 中文徽标（只标注能识别的常见类别，其余不显示）
+  private getAmapTypeBadge(typecode: string): string | undefined {
+    if (typecode.startsWith('1203')) return '小区';
+    if (typecode.startsWith('1202')) return '写字楼';
+    if (typecode.startsWith('1201')) return '园区';
+    if (typecode.startsWith('06')) return '购物';
+    if (typecode.startsWith('05')) return '餐饮';
+    if (typecode.startsWith('14')) return '学校';
+    if (typecode.startsWith('09')) return '医院';
+    if (typecode.startsWith('11')) return '景点';
+    if (typecode.startsWith('10')) return '酒店';
+    if (typecode.startsWith('15')) return '交通';
+    return undefined;
+  }
+
+  // 高德 API 请求（带超时与状态检查）
+  private async fetchAmapJson(url: string): Promise<any> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`高德地图 API 请求失败: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.status !== '1') {
+        throw new Error(data.info || '搜索失败');
+      }
+      return data;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // 渲染搜索结果
@@ -1661,7 +1740,7 @@ class WeatherLocationPlugin extends Plugin {
 
     return results.map((city, index) => `
       <div class="city-search-result" data-index="${index}" style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 14px;">
-        <div style="font-weight: 500;">${this.escapeHtml(city.name)}</div>
+        <div style="font-weight: 500;">${this.escapeHtml(city.name)}${city.badge ? `<span class="wl-result-badge">${this.escapeHtml(city.badge)}</span>` : ''}</div>
         <div style="font-size: 12px; color: #999; margin-top: 2px;">${this.escapeHtml(city.displayName)}</div>
       </div>
     `).join('');

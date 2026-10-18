@@ -195,17 +195,18 @@
 }
 
 #weather-location-settings .wl-gap-input {
-    width: 4ch;
-    min-width: 3ch;
-    padding: 4px 2px;
-    border: 0;
-    border-bottom: 1px dashed var(--b3-border-color);
-    border-radius: 0;
-    background: transparent;
-    color: var(--b3-theme-on-background);
+    width: 56px;
+    min-width: 56px;
+    max-width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 4px;
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
     font-family: var(--b3-font-family-code), monospace;
     font-size: 13px;
-    text-align: center;
+    text-align: left;
+    box-sizing: border-box;
 }
 
 #weather-location-settings .wl-gap-input::placeholder {
@@ -213,14 +214,19 @@
     opacity: 0.6;
 }
 
+#weather-location-settings .wl-gap-input:hover {
+    border-color: var(--b3-theme-primary-lighter);
+}
+
 #weather-location-settings .wl-gap-input:focus {
     outline: none;
-    border-bottom-color: var(--b3-theme-primary);
+    border-color: var(--b3-theme-primary);
+    box-shadow: 0 0 0 2px var(--b3-theme-primary-light);
 }
 
 #weather-location-settings .wl-gap-input--drop {
-    border-bottom: 2px solid var(--b3-theme-primary);
-    background: var(--b3-theme-surface);
+    border-color: var(--b3-theme-primary);
+    box-shadow: 0 0 0 2px var(--b3-theme-primary-light);
 }
 
 #weather-location-settings .wl-chip {
@@ -546,6 +552,12 @@
         font-size: 14px !important;
         padding: 10px 12px !important;
     }
+
+    /* 格式编辑区的符号输入框保持紧凑，宽度仍由内容自适应 */
+    #weather-location-settings .wl-gap-input {
+        font-size: 13px !important;
+        padding: 4px 8px !important;
+    }
     
     #weather-location-settings .setting-actions {
         flex-wrap: wrap !important;
@@ -564,78 +576,55 @@
     }
 }
 
-/* “插入天气”弹窗样式 - 限定在弹窗容器内 */
+/* “插入天气”弹窗样式 - 紧凑单页布局，限定在弹窗容器内 */
 #weather-insert-dialog.wl-insert {
-    padding: 16px;
+    padding: 12px 16px 14px;
     max-height: 70vh;
     overflow-y: auto;
     color: var(--b3-theme-on-background);
     background: var(--b3-theme-background);
 }
 
-#weather-insert-dialog .wl-settings__tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px;
-    padding: 4px;
-    margin-bottom: 16px;
-    border: 1px solid var(--b3-border-color);
-    border-radius: 8px;
-    background: var(--b3-theme-surface);
+/* 当地天气：标题说明与按钮同一行 */
+#weather-insert-dialog .wl-insert__local {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
-#weather-insert-dialog .wl-settings__tab {
-    min-height: 36px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--b3-theme-on-surface);
-    cursor: pointer;
-    font-size: 14px;
+#weather-insert-dialog .wl-insert__local-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-on-background);
 }
 
-#weather-insert-dialog .wl-settings__tab.is-active {
-    background: var(--b3-theme-background);
-    color: var(--b3-theme-primary);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-#weather-insert-dialog .wl-insert__page {
-    display: none;
-}
-
-#weather-insert-dialog .wl-insert__page.is-active {
-    display: block;
-}
-
-#weather-insert-dialog .wl-insert__hint {
-    margin-bottom: 16px;
+#weather-insert-dialog .wl-insert__local-hint {
+    margin-top: 2px;
     color: var(--b3-theme-on-surface-light);
-    font-size: 13px;
-    line-height: 1.6;
+    font-size: 11px;
 }
 
-#weather-insert-dialog .setting-item {
-    margin-bottom: 12px;
+#weather-insert-dialog #wl-insert-local-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
-#weather-insert-dialog .setting-item label {
-    display: block;
-    margin: 10px 0 6px;
-    color: var(--b3-theme-on-surface);
-    font-size: 13px;
-    font-weight: 500;
+/* 分区之间的虚线分隔 */
+#weather-insert-dialog .wl-insert__separator {
+    margin: 10px 0;
+    border-top: 1px dashed var(--b3-border-color);
 }
 
 #weather-insert-dialog input[type="text"] {
     width: 100%;
     box-sizing: border-box;
-    padding: 8px 12px;
+    padding: 7px 10px;
     border: 1px solid var(--b3-border-color);
     border-radius: 6px;
     background: var(--b3-theme-background);
     color: var(--b3-theme-on-background);
-    font-size: 14px;
+    font-size: 13px;
     font-family: inherit;
 }
 
@@ -667,69 +656,106 @@
     background: var(--b3-list-hover);
 }
 
-#weather-insert-dialog .wl-insert__divider {
+/* POI 类型徽标（小区/写字楼等），插入弹窗与设置页搜索共用 */
+#weather-insert-dialog .wl-result-badge,
+#weather-location-settings .wl-result-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--b3-theme-primary-light);
+    color: var(--b3-theme-primary);
+    font-size: 10px;
+    font-weight: 400;
+    vertical-align: 1px;
+}
+
+/* 纬度 / 经度 / 名称 / 插入：同一行 */
+#weather-insert-dialog .wl-insert__row {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 14px 0 10px;
-    color: var(--b3-theme-on-surface-light);
-    font-size: 12px;
-}
-
-#weather-insert-dialog .wl-insert__divider::before,
-#weather-insert-dialog .wl-insert__divider::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--b3-border-color);
-}
-
-#weather-insert-dialog .wl-insert__coords {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-}
-
-#weather-insert-dialog #wl-insert-local-btn,
-#weather-insert-dialog #wl-insert-custom-btn {
-    width: 100%;
+    gap: 6px;
     margin-top: 8px;
 }
 
-#weather-insert-dialog .wl-insert__empty {
-    padding: 16px 10px;
-    color: var(--b3-theme-on-surface-light);
-    font-size: 13px;
-    text-align: center;
-}
-
-#weather-insert-dialog .wl-insert__city {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px 12px;
-    margin-bottom: 6px;
-    border-radius: 6px;
-    background: var(--b3-theme-surface);
-}
-
-#weather-insert-dialog .wl-insert__city-info {
+#weather-insert-dialog .wl-insert__row input {
     flex: 1;
     min-width: 0;
 }
 
-#weather-insert-dialog .wl-insert__city-name {
-    font-size: 14px;
-    font-weight: 500;
+#weather-insert-dialog #wl-insert-custom-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
-#weather-insert-dialog .wl-insert__city-coords {
-    margin-top: 2px;
+#weather-insert-dialog .wl-insert__hint {
+    margin-top: 6px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+#weather-insert-dialog .wl-insert__hint b {
+    color: var(--b3-theme-on-surface);
+    font-weight: 600;
+}
+
+/* 常用地点：横向标签，点击即插入 */
+#weather-insert-dialog .wl-insert__fav {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#weather-insert-dialog .wl-insert__fav-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-on-background);
+}
+
+#weather-insert-dialog .wl-insert__fav-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#weather-insert-dialog .wl-insert__fav-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 999px;
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+#weather-insert-dialog .wl-insert__fav-chip:hover {
+    border-color: var(--b3-theme-primary);
+    color: var(--b3-theme-primary);
+}
+
+#weather-insert-dialog .wl-insert__fav-cmd {
+    color: var(--b3-theme-on-surface-light);
+    font-size: 10px;
+}
+
+#weather-insert-dialog .wl-insert__empty {
+    padding: 4px 0;
     color: var(--b3-theme-on-surface-light);
     font-size: 12px;
 }
 
-#weather-insert-dialog .wl-insert__city-btn {
-    flex-shrink: 0;
+/* 移动端：经纬度一行排不下时换行 */
+@media (max-width: 768px) {
+    #weather-insert-dialog .wl-insert__row {
+        flex-wrap: wrap;
+    }
+
+    #weather-insert-dialog .wl-insert__row input {
+        flex: 1 1 calc(33% - 6px);
+    }
 }
