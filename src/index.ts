@@ -10,6 +10,7 @@ import {
   normalizeOutputConfig,
   renderOutputConfig
 } from './outputConfig';
+import { removeSlashTrigger, splitBlockIAL, withBlockIAL } from './slashTrigger';
 
 const STORAGE_NAME = 'weather-location-config';
 const MAX_FAVORITE_CITIES = 5;
@@ -19,7 +20,6 @@ interface FavoriteCity {
   name: string;
   lat: number;
   lon: number;
-  pinyinPrefix: string; // 地点名首字母缩写，如"北京"->"bj"
   address?: string;
 }
 
@@ -31,81 +31,6 @@ interface CitySearchResult {
   displayName: string;
   address: string;
   badge?: string; // POI 类型徽标，如「小区」「写字楼」
-}
-
-// 常用汉字拼音首字母映射表（基于实际拼音，处理多音字）
-const PINYIN_FIRST_LETTERS: Record<string, string> = {
-  // A
-  '阿': 'a', '安': 'a', '澳': 'a', '敖': 'a',
-  // B
-  '北': 'b', '宝': 'b', '本': 'b', '巴': 'b', '包': 'b', '滨': 'b', '蚌': 'b', '亳': 'b',
-  // C
-  '长': 'c', '成': 'c', '重': 'c', '沧': 'c', '昌': 'c', '潮': 'c', '郴': 'c', '常': 'c',
-  // D
-  '大': 'd', '东': 'd', '丹': 'd', '德': 'd', '定': 'd', '迪': 'd', '达': 'd',
-  // E
-  '鄂': 'e', '恩': 'e', '尔': 'e',
-  // F
-  '福': 'f', '佛': 'f', '抚': 'f', '阜': 'f', '防': 'f', '丰': 'f',
-  // G
-  '广': 'g', '贵': 'g', '桂': 'g', '甘': 'g', '赣': 'g', '固': 'g', '港': 'g',
-  // H
-  '哈': 'h', '海': 'h', '杭': 'h', '合': 'h', '河': 'h', '呼': 'h', '惠': 'h', '湖': 'h', '衡': 'h', '淮': 'h', '黄': 'h', '华': 'h', '菏': 'h', '怀': 'h', '鹤': 'h', '汉': 'h', '洪': 'h',
-  // J
-  '济': 'j', '江': 'j', '吉': 'j', '金': 'j', '嘉': 'j', '佳': 'j', '建': 'j', '揭': 'j', '晋': 'j', '荆': 'j', '景': 'j', '九': 'j', '酒': 'j',
-  // K
-  '昆': 'k', '喀': 'k', '开': 'k', '克': 'k',
-  // L
-  '兰': 'l', '拉': 'l', '柳': 'l', '洛': 'l', '聊': 'l', '临': 'l', '六': 'l', '丽': 'l', '连': 'l', '廊': 'l', '辽': 'l', '莱': 'l', '泸': 'l', '潞': 'l',
-  // M
-  '茂': 'm', '梅': 'm', '牡': 'm', '绵': 'm', '明': 'm', '马': 'm', '眉': 'm',
-  // N
-  '南': 'n', '宁': 'n', '内': 'n',
-  // P
-  '平': 'p', '莆': 'p', '濮': 'p', '盘': 'p', '攀': 'p',
-  // Q
-  '青': 'q', '泉': 'q', '衢': 'q', '曲': 'q', '秦': 'q', '庆': 'q', '清': 'q', '钦': 'q', '七': 'q',
-  // R
-  '日': 'r', '荣': 'r', '榕': 'r', '仁': 'r', '任': 'r', '如': 'r', '瑞': 'r',
-  // S
-  '上': 's', '深': 's', '石': 's', '沈': 's', '苏': 's', '山': 's', '汕': 's', '绍': 's', '宿': 's', '朔': 's', '松': 's', '双': 's', '三': 's', '沙': 's', '十': 's', '邵': 's', '随': 's', '遂': 's',
-  // T
-  '太': 't', '台': 't', '泰': 't', '唐': 't', '天': 't', '铜': 't', '通': 't', '吐': 't', '桐': 't', '潭': 't',
-  // W
-  '武': 'w', '乌': 'w', '温': 'w', '渭': 'w', '潍': 'w', '威': 'w', '芜': 'w', '梧': 'w', '吴': 'w', '无': 'w', '卫': 'w', '文': 'w',
-  // X
-  '西': 'x', '厦': 'x', '新': 'x', '徐': 'x', '宣': 'x', '咸': 'x', '孝': 'x', '湘': 'x', '襄': 'x', '邢': 'x', '信': 'x', '许': 'x', '忻': 'x', '锡': 'x', '奚': 'x',
-  // Y
-  '银': 'y', '延': 'y', '烟': 'y', '盐': 'y', '扬': 'y', '阳': 'y', '宜': 'y', '益': 'y', '永': 'y', '岳': 'y', '玉': 'y', '云': 'y', '运': 'y', '榆': 'y', '鹰': 'y', '义': 'y', '姚': 'y', '禹': 'y', '虞': 'y',
-  // Z
-  '郑': 'z', '珠': 'z', '湛': 'z', '肇': 'z', '中': 'z', '淄': 'z', '枣': 'z', '张': 'z', '镇': 'z', '舟': 'z', '漳': 'z', '遵': 'z', '株': 'z', '驻': 'z', '资': 'z', '邹': 'z',
-};
-
-// 获取城市名称的拼音首字母
-function getPinyinPrefix(cityName: string): string {
-  if (!cityName) return '';
-
-  // 取前两个字（通常是城市名的核心部分）
-  const chars = cityName.slice(0, 2).split('');
-  const prefix = chars.map(char => {
-    // 如果是英文字母，直接返回小写
-    if (/[a-zA-Z]/.test(char)) {
-      return char.toLowerCase();
-    }
-    // 如果是数字，跳过
-    if (/\d/.test(char)) {
-      return '';
-    }
-    // 从映射表中查找
-    if (PINYIN_FIRST_LETTERS[char]) {
-      return PINYIN_FIRST_LETTERS[char];
-    }
-    // 如果映射表中没有，返回空字符串（避免错误映射）
-    console.warn(`[WeatherLocation] 未找到汉字 "${char}" 的拼音映射`);
-    return '';
-  }).join('');
-
-  return prefix;
 }
 
 interface PluginConfig {
@@ -341,37 +266,9 @@ class WeatherLocationPlugin extends Plugin {
   }
 
   // 更新斜杠命令（用于配置更新时，避免完全重新注册导致重复）
+  // 常用地址不再注册为斜杠命令，统一从「插入天气」弹窗中选择
   private updateSlashCommands() {
-    console.log('[WeatherLocation] Updating slash commands...');
-
-    // 保留基础命令，只更新城市相关命令
-    const baseCommands = this.createBaseSlashCommands();
-
-    // 添加常用城市天气插入命令
-    this.config.favoriteCities.forEach((city, index) => {
-      const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
-      const pinyinFilter = pinyinPrefix ? `${pinyinPrefix}tq` : '';
-
-      const filters = [`${city.name}天气`, `${city.name} weather`, `${city.name} tianqi`];
-      if (pinyinPrefix) {
-        filters.push(pinyinFilter, `${pinyinPrefix}tianqi`);
-      }
-
-      baseCommands.push({
-        filter: filters,
-        html: `<span class="b3-list-item__text">🌤 ${this.escapeHtml(city.name)}天气${pinyinPrefix ? ` (${this.escapeHtml(pinyinPrefix)}tq)` : ''}</span>`,
-        id: `insert-favorite-city-weather-${index}`,
-        callback: async (protyle: any, nodeElement: HTMLElement) => {
-          const data = await this.getTemplateDataForCity(city);
-          if (!data) return;
-          const content = this.renderConfiguredOutput(data);
-          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, filters);
-        }
-      });
-    });
-
-    this.protyleSlash = baseCommands;
-    console.log('[WeatherLocation] Slash commands updated, count:', baseCommands.length);
+    this.protyleSlash = this.createBaseSlashCommands();
   }
 
   // 预加载位置和天气数据（后台异步执行）
@@ -448,6 +345,7 @@ class WeatherLocationPlugin extends Plugin {
   }
 
   // 注册斜杠命令（仅在插件加载时调用一次）
+  // 只注册基础命令；常用地址不再注册为斜杠命令，统一从「插入天气」弹窗中选择
   private registerSlashCommand() {
     console.log('[WeatherLocation] Registering slash commands...');
 
@@ -457,44 +355,10 @@ class WeatherLocationPlugin extends Plugin {
       return;
     }
 
-    // 清空现有的斜杠命令
-    this.protyleSlash = [];
-
-    const slashCommands: any[] = this.createBaseSlashCommands();
-
-    // 添加常用城市天气插入命令
-    this.config.favoriteCities.forEach((city, index) => {
-      // 优先使用用户自定义的快捷指令前缀，如果没有则自动生成
-      const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
-      const pinyinFilter = pinyinPrefix ? `${pinyinPrefix}tq` : '';
-
-      // 合并所有过滤条件到一个指令中（避免快捷面板显示多个指令）
-      const filters = [`${city.name}天气`, `${city.name} weather`, `${city.name} tianqi`];
-      if (pinyinPrefix) {
-        filters.push(pinyinFilter, `${pinyinPrefix}tianqi`);
-      }
-
-      slashCommands.push({
-        filter: filters,
-        html: `<span class="b3-list-item__text">🌤 ${this.escapeHtml(city.name)}天气${pinyinPrefix ? ` (${this.escapeHtml(pinyinPrefix)}tq)` : ''}</span>`,
-        id: `insert-favorite-city-weather-${index}`,
-        callback: async (protyle: any, nodeElement: HTMLElement) => {
-          const data = await this.getTemplateDataForCity(city);
-          if (!data) return;
-          const content = this.renderConfiguredOutput(data);
-          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, filters);
-        }
-      });
-
-      if (pinyinPrefix) {
-        console.log(`[WeatherLocation] 注册快捷指令: ${city.name}天气 / ${pinyinFilter}`);
-      }
-    });
-
     // 使用数组赋值方式，确保思源笔记能正确识别
-    this.protyleSlash = slashCommands;
+    this.protyleSlash = this.createBaseSlashCommands();
     this.slashCommandsRegistered = true;
-    console.log('[WeatherLocation] Slash commands registered, count:', slashCommands.length);
+    console.log('[WeatherLocation] Slash commands registered, count:', this.protyleSlash.length);
   }
 
   private registerMenu() {
@@ -514,7 +378,7 @@ class WeatherLocationPlugin extends Plugin {
       const dialog = new Dialog({
         title: '插入天气',
         content: this.createWeatherInsertContent(),
-        width: this.isMobile() ? '95vw' : '520px'
+        width: this.isMobile() ? '95vw' : '560px'
       });
 
       // 延迟绑定事件，确保 DOM 已渲染
@@ -527,63 +391,180 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  // 创建“插入天气”弹窗内容（紧凑单页布局：当地天气 / 搜索与经纬度 / 常用地点）
+  // 创建“插入天气”弹窗内容（当前位置卡片 + 搜索地址 + 常用地址 + 手动经纬度）
   private createWeatherInsertContent(): string {
     return `
       <div id="weather-insert-dialog" class="wl-insert">
-        <div class="wl-insert__local">
-          <div class="wl-insert__local-info">
-            <div class="wl-insert__local-title">📍 当地天气</div>
-            <div class="wl-insert__local-hint">插入当前定位地点的天气与位置</div>
+        <div class="wl-local" id="wl-local-card">
+          <div class="wl-local__placeholder">正在获取当前位置天气…</div>
+        </div>
+
+        <div class="wl-block">
+          <div class="wl-block__head">
+            <span class="wl-block__title">搜索地址</span>
+            <span class="wl-block__meta">支持小区、写字楼、园区</span>
           </div>
-          <button id="wl-insert-local-btn" class="b3-button b3-button--primary" type="button">🌤 插入当地天气</button>
+          <div class="wl-search">
+            <svg class="wl-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path></svg>
+            <input type="text" id="wl-insert-city-search" placeholder="搜索城市、小区或写字楼，如 望京" autocomplete="off">
+          </div>
+          <div class="wl-rows" id="wl-insert-city-results" style="display:none;"></div>
         </div>
 
-        <div class="wl-insert__separator"></div>
-
-        <div class="wl-search-wrap">
-          <input type="text" id="wl-insert-city-search" placeholder="🔍 搜索城市、区县、小区、写字楼…">
-          <div id="wl-insert-city-results"></div>
-        </div>
-
-        <div class="wl-insert__row">
-          <input type="text" id="wl-insert-lat" placeholder="纬度，如 29.52">
-          <input type="text" id="wl-insert-lon" placeholder="经度，如 112.55">
-          <input type="text" id="wl-insert-name" placeholder="名称（可选）">
-          <button id="wl-insert-custom-btn" class="b3-button b3-button--primary" type="button">插入</button>
-        </div>
-        <div class="wl-insert__hint">支持搜索<b>小区、商场、写字楼</b>等详细地点；手动填经纬度时优先使用经纬度。</div>
-
-        <div class="wl-insert__separator"></div>
-
-        <div class="wl-insert__fav">
-          <span class="wl-insert__fav-label">⭐ 常用</span>
-          <div class="wl-insert__fav-chips" id="wl-insert-favorite-list">
+        <div class="wl-block">
+          <div class="wl-block__head">
+            <span class="wl-block__title">常用地址</span>
+            <span class="wl-block__meta" id="wl-insert-fav-count"></span>
+          </div>
+          <div class="wl-rows" id="wl-insert-favorite-list">
             ${this.renderInsertFavoriteList()}
           </div>
+        </div>
+
+        <button class="wl-insert__manual-toggle" id="wl-manual-toggle" type="button">手动输入经纬度</button>
+        <div class="wl-insert__manual" id="wl-manual-panel" style="display:none;">
+          <div class="wl-insert__row">
+            <input type="text" id="wl-insert-lat" placeholder="纬度，如 29.52">
+            <input type="text" id="wl-insert-lon" placeholder="经度，如 112.55">
+            <input type="text" id="wl-insert-name" placeholder="名称（可选）">
+            <button id="wl-insert-custom-btn" class="b3-button b3-button--primary" type="button">插入</button>
+          </div>
+          <div class="wl-insert__hint">手动填写经纬度时优先使用经纬度；名称留空则以坐标显示。</div>
         </div>
       </div>
     `;
   }
 
-  // 渲染“插入天气”弹窗中的常用地点标签（点击即插入）
+  // 渲染弹窗顶部的当地天气卡片
+  private renderInsertLocalCard(status: 'loading' | 'ready' | 'error', data?: any): string {
+    if (status === 'loading') {
+      return '<div class="wl-local__placeholder">正在获取当前位置天气…</div>';
+    }
+
+    const relocateBtn = `
+      <button class="wl-icon-btn" id="wl-relocate-btn" type="button" title="重新定位" aria-label="重新定位">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4.2"/></svg>
+      </button>
+    `;
+
+    if (status === 'error' || !data) {
+      return `
+        <div class="wl-local__head">
+          <div class="wl-local__info">
+            <div class="wl-local__kicker">当前位置</div>
+            <div class="wl-local__name">定位失败</div>
+            <div class="wl-local__sub">请检查网络连接与高德地图 Key 配置</div>
+          </div>
+          <div class="wl-local__temp"><span class="wl-local__temp-num">—</span></div>
+        </div>
+        <div class="wl-local__actions">
+          <button class="b3-button b3-button--primary" id="wl-insert-local-btn" type="button" disabled>插入当地天气</button>
+          ${relocateBtn}
+        </div>
+      `;
+    }
+
+    const { weather, location } = data;
+    const city = location.city || '当前位置';
+    const sub = location.district || location.formatted_address || '';
+    const range = (weather.tempMin != null && weather.tempMax != null)
+      ? ` · 今日 ${weather.tempMin}° ~ ${weather.tempMax}°`
+      : '';
+    const wind = weather.windDirection
+      ? ` · ${`${weather.windDirection} ${weather.windPower || ''}`.trim()}`
+      : '';
+    const cond = `${weather.description} · 湿度 ${weather.humidity}%${wind}${range}`;
+
+    return `
+      <div class="wl-local__head">
+        <div class="wl-local__info">
+          <div class="wl-local__kicker">当前位置</div>
+          <div class="wl-local__name">${this.escapeHtml(city)}</div>
+          ${sub ? `<div class="wl-local__sub">${this.escapeHtml(sub)}</div>` : ''}
+        </div>
+        <div class="wl-local__temp">
+          <span class="wl-local__temp-num">${this.escapeHtml(String(weather.temperature))}</span><span class="wl-local__temp-deg">°C</span>
+        </div>
+      </div>
+      <div class="wl-local__cond">${this.escapeHtml(cond)}</div>
+      <div class="wl-local__actions">
+        <button class="b3-button b3-button--primary" id="wl-insert-local-btn" type="button">插入当地天气</button>
+        ${relocateBtn}
+      </div>
+    `;
+  }
+
+  // 静默加载当地天气卡片（失败只更新卡片，不弹消息）
+  private async loadInsertDialogLocal() {
+    const card = document.getElementById('wl-local-card');
+    if (!card) return;
+    card.innerHTML = this.renderInsertLocalCard('loading');
+    try {
+      const location = await this.locationService.getCurrentLocation();
+      if (!location) throw new Error('定位失败');
+      const weather = await this.weatherService.getWeather(location.lat, location.lon);
+      if (!weather) throw new Error('天气获取失败');
+      if (!card.isConnected) return;
+      card.innerHTML = this.renderInsertLocalCard('ready', { weather, location });
+    } catch (error) {
+      console.warn('[WeatherLocation] 弹窗获取当地天气失败:', error);
+      if (card.isConnected) {
+        card.innerHTML = this.renderInsertLocalCard('error');
+      }
+    }
+  }
+
+  // 渲染“插入天气”弹窗中的常用地址列表（点击行插入，右侧删除）
   private renderInsertFavoriteList(): string {
     if (this.config.favoriteCities.length === 0) {
-      return '<span class="wl-insert__empty">暂无常用地点，可先在插件设置中添加</span>';
+      return '<div class="wl-rows__empty">暂无常用地址。<br>在搜索结果里点「存为常用」，或到插件设置中添加。</div>';
     }
 
     return this.config.favoriteCities.map((city, index) => {
-      const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
-      const tooltip = `${city.address || city.name}\n${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}`;
+      const sub = city.address || `${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}`;
       return `
-        <button class="wl-insert__fav-chip" data-index="${index}" type="button" title="${this.escapeAttribute(tooltip)}">
-          ${this.escapeHtml(city.name)}${pinyinPrefix ? `<span class="wl-insert__fav-cmd">/${this.escapeHtml(pinyinPrefix)}tq</span>` : ''}
-        </button>
+        <div class="wl-row">
+          <button class="wl-row__main" data-fav-index="${index}" type="button" title="插入 ${this.escapeAttribute(city.name)} 的天气">
+            <span class="wl-row__name">${this.escapeHtml(city.name)}</span>
+            <span class="wl-row__sub">${this.escapeHtml(sub)}</span>
+          </button>
+          <button class="wl-row__del" data-fav-del="${index}" type="button" title="删除常用地址" aria-label="删除常用地址 ${this.escapeAttribute(city.name)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M8 7l.8 12h6.4L16 7"/></svg>
+          </button>
+        </div>
       `;
     }).join('');
   }
 
-  // 绑定“插入天气”弹窗事件（单页布局，无页签）
+  // 渲染“插入天气”弹窗中的搜索结果（点击行直接插入，右侧可存为常用）
+  private renderInsertSearchResults(results: CitySearchResult[]): string {
+    return results.map((city, index) => {
+      const saved = this.config.favoriteCities.some(c => c.name === city.name);
+      return `
+        <div class="wl-row">
+          <button class="wl-row__main" data-result-index="${index}" type="button" title="插入 ${this.escapeAttribute(city.name)} 的天气">
+            <span class="wl-row__name">${this.escapeHtml(city.name)}${city.badge ? `<span class="wl-result-badge">${this.escapeHtml(city.badge)}</span>` : ''}</span>
+            <span class="wl-row__sub">${this.escapeHtml(city.displayName)}</span>
+          </button>
+          <button class="wl-row__add" data-result-add="${index}" type="button" ${saved ? 'disabled' : ''}>${saved ? '已存' : '存为常用'}</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 刷新弹窗中的常用地址列表与计数
+  private refreshInsertFavoriteList(container: HTMLElement) {
+    const list = container.querySelector('#wl-insert-favorite-list');
+    if (list) {
+      list.innerHTML = this.renderInsertFavoriteList();
+    }
+    const count = container.querySelector('#wl-insert-fav-count');
+    if (count) {
+      count.textContent = this.config.favoriteCities.length > 0 ? `${this.config.favoriteCities.length} 个` : '';
+    }
+  }
+
+  // 绑定“插入天气”弹窗事件（事件委托，卡片重绘后无需重新绑定）
   private bindWeatherInsertEvents(dialog: any, blockId: string, triggers: string[]) {
     const container = document.getElementById('weather-insert-dialog');
     if (!container) {
@@ -591,21 +572,82 @@ class WeatherLocationPlugin extends Plugin {
       return;
     }
 
-    // 1. 当地天气
-    container.querySelector('#wl-insert-local-btn')?.addEventListener('click', async () => {
-      await this.insertWeatherFromDialog(dialog, blockId, triggers, () => this.getTemplateData());
-    });
-
-    // 2. 城市搜索（防抖）
+    let currentResults: CitySearchResult[] = [];
+    let searchTimeout: NodeJS.Timeout | null = null;
     const searchInput = container.querySelector('#wl-insert-city-search') as HTMLInputElement;
     const searchResults = container.querySelector('#wl-insert-city-results') as HTMLDivElement;
-    let currentResults: CitySearchResult[] = [];
-    let selectedCity: CitySearchResult | null = null;
-    let searchTimeout: NodeJS.Timeout | null = null;
 
+    // 加载当地天气卡片（静默失败，只更新卡片）
+    this.loadInsertDialogLocal();
+    this.refreshInsertFavoriteList(container);
+
+    // 点击委托：当地天气 / 重新定位 / 常用地址插入与删除 / 搜索结果插入与收藏
+    container.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+
+      if (target.closest('#wl-insert-local-btn')) {
+        await this.insertWeatherFromDialog(dialog, blockId, triggers, () => this.getTemplateData());
+        return;
+      }
+
+      if (target.closest('#wl-relocate-btn')) {
+        this.locationService.clearCache();
+        this.weatherService.clearCache();
+        this.loadInsertDialogLocal();
+        return;
+      }
+
+      const favMain = target.closest('[data-fav-index]') as HTMLElement;
+      if (favMain) {
+        const city = this.config.favoriteCities[parseInt(favMain.dataset.favIndex || '0')];
+        if (!city) return;
+        await this.insertWeatherFromDialog(dialog, blockId, triggers, () => this.getTemplateDataForCity(city));
+        return;
+      }
+
+      const favDel = target.closest('[data-fav-del]') as HTMLElement;
+      if (favDel) {
+        const index = parseInt(favDel.dataset.favDel || '0');
+        const city = this.config.favoriteCities[index];
+        if (!city) return;
+        this.removeFavoriteCity(index);
+        await this.saveConfig();
+        this.refreshInsertFavoriteList(container);
+        if (searchResults.style.display !== 'none' && currentResults.length > 0) {
+          searchResults.innerHTML = this.renderInsertSearchResults(currentResults);
+        }
+        showMessage(`已删除常用地址「${city.name}」`);
+        return;
+      }
+
+      const resultMain = target.closest('[data-result-index]') as HTMLElement;
+      if (resultMain) {
+        const city = currentResults[parseInt(resultMain.dataset.resultIndex || '0')];
+        if (!city) return;
+        await this.insertWeatherFromDialog(dialog, blockId, triggers, () =>
+          this.getTemplateDataForCoordinates(city.lat, city.lon, city.name)
+        );
+        return;
+      }
+
+      const resultAdd = target.closest('[data-result-add]') as HTMLElement;
+      if (resultAdd) {
+        if (resultAdd.hasAttribute('disabled')) return;
+        const city = currentResults[parseInt(resultAdd.dataset.resultAdd || '0')];
+        if (!city) return;
+        if (this.addFavoriteCity(city)) {
+          await this.saveConfig();
+          this.refreshInsertFavoriteList(container);
+          searchResults.innerHTML = this.renderInsertSearchResults(currentResults);
+          showMessage(`已把「${city.name}」存为常用地址`);
+        }
+        return;
+      }
+    });
+
+    // 搜索输入（防抖）
     searchInput?.addEventListener('input', () => {
       const query = searchInput.value.trim();
-      selectedCity = null;
 
       if (searchTimeout) {
         clearTimeout(searchTimeout);
@@ -613,17 +655,16 @@ class WeatherLocationPlugin extends Plugin {
 
       if (query.length < 2) {
         searchResults.style.display = 'none';
+        currentResults = [];
         return;
       }
 
       searchTimeout = setTimeout(async () => {
         try {
           currentResults = await this.searchCities(query);
-          if (currentResults.length > 0) {
-            searchResults.innerHTML = this.renderSearchResults(currentResults);
-          } else {
-            searchResults.innerHTML = '<div class="wl-insert__empty">未找到匹配的地点，请尝试其他关键词</div>';
-          }
+          searchResults.innerHTML = currentResults.length > 0
+            ? this.renderInsertSearchResults(currentResults)
+            : '<div class="wl-rows__empty">未找到匹配的地点，换个关键词试试</div>';
           searchResults.style.display = 'block';
         } catch (error) {
           showMessage('地点搜索失败: ' + (error as Error).message);
@@ -631,24 +672,26 @@ class WeatherLocationPlugin extends Plugin {
       }, 500);
     });
 
-    searchResults?.addEventListener('click', (e) => {
-      const resultItem = (e.target as HTMLElement).closest('.city-search-result') as HTMLElement;
-      if (!resultItem) return;
-      const index = parseInt(resultItem.dataset.index || '0');
-      selectedCity = currentResults[index] || null;
-      if (selectedCity) {
-        searchInput.value = selectedCity.name;
-        searchResults.style.display = 'none';
-      }
-    });
-
     searchInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         searchResults.style.display = 'none';
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = searchResults.querySelector('[data-result-index]') as HTMLElement;
+        first?.click();
       }
     });
 
-    // 2. 插入指定城市/经纬度的天气
+    // 手动经纬度面板折叠/展开
+    const manualToggle = container.querySelector('#wl-manual-toggle') as HTMLButtonElement;
+    const manualPanel = container.querySelector('#wl-manual-panel') as HTMLDivElement;
+    manualToggle?.addEventListener('click', () => {
+      const show = manualPanel.style.display === 'none';
+      manualPanel.style.display = show ? 'block' : 'none';
+      manualToggle.textContent = show ? '收起手动输入' : '手动输入经纬度';
+    });
+
+    // 手动经纬度插入
     container.querySelector('#wl-insert-custom-btn')?.addEventListener('click', async () => {
       const latInput = container.querySelector('#wl-insert-lat') as HTMLInputElement;
       const lonInput = container.querySelector('#wl-insert-lon') as HTMLInputElement;
@@ -658,51 +701,14 @@ class WeatherLocationPlugin extends Plugin {
       const lat = parseFloat(latInput?.value || '');
       const lon = parseFloat(lonInput?.value || '');
 
-      let target: { lat: number; lon: number; name: string } | null = null;
-
-      // 经纬度优先
-      if (Number.isFinite(lat) && Number.isFinite(lon)) {
-        target = { lat, lon, name: customName };
-      } else if (selectedCity) {
-        target = { lat: selectedCity.lat, lon: selectedCity.lon, name: customName || selectedCity.name };
-      } else {
-        const query = searchInput?.value.trim() || '';
-        if (query.length >= 2) {
-          try {
-            const results = await this.searchCities(query);
-            if (results.length > 0) {
-              target = { lat: results[0].lat, lon: results[0].lon, name: customName || results[0].name };
-            } else {
-              showMessage('未找到匹配的地点，请尝试其他关键词或直接输入经纬度');
-              return;
-            }
-          } catch (error) {
-            showMessage('地点搜索失败: ' + (error as Error).message);
-            return;
-          }
-        }
-      }
-
-      if (!target) {
-        showMessage('请输入城市名称或有效的经纬度');
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        showMessage('请输入有效的经纬度');
         return;
       }
 
-      const targetInfo = target;
       await this.insertWeatherFromDialog(dialog, blockId, triggers, () =>
-        this.getTemplateDataForCoordinates(targetInfo.lat, targetInfo.lon, targetInfo.name)
+        this.getTemplateDataForCoordinates(lat, lon, customName)
       );
-    });
-
-    // 3. 常用地点（点击标签即插入）
-    const favoriteList = container.querySelector('#wl-insert-favorite-list');
-    favoriteList?.addEventListener('click', async (e) => {
-      const btn = (e.target as HTMLElement).closest('.wl-insert__fav-chip') as HTMLElement;
-      if (!btn) return;
-      const index = parseInt(btn.dataset.index || '0');
-      const city = this.config.favoriteCities[index];
-      if (!city) return;
-      await this.insertWeatherFromDialog(dialog, blockId, triggers, () => this.getTemplateDataForCity(city));
     });
   }
 
@@ -820,9 +826,6 @@ class WeatherLocationPlugin extends Plugin {
 
                 <label>经度</label>
                 <input type="text" id="manual-city-lon" placeholder="如：116.4074">
-
-                <label>快捷指令（可选，如：bj）</label>
-                <input type="text" id="manual-city-prefix" placeholder="留空则自动生成">
 
                 <button id="add-manual-city-btn" class="b3-button b3-button--primary" type="button">添加地点</button>
                 <div class="setting-help">格式：地点名、纬度、经度。可在地图软件中查询坐标</div>
@@ -1753,15 +1756,12 @@ class WeatherLocationPlugin extends Plugin {
     }
 
     return this.config.favoriteCities.map((city, index) => {
-      // 重新计算首字母，确保使用最新的映射表
-      const pinyinPrefix = city.pinyinPrefix || getPinyinPrefix(city.name);
       return `
       <div class="favorite-city-item" data-index="${index}" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 6px; background: #f5f5f5; border-radius: 4px;">
         <div style="flex: 1;">
           <div style="font-size: 14px; font-weight: 500;">${this.escapeHtml(city.name)}</div>
           <div style="font-size: 12px; color: #666; margin-top: 2px;">
             坐标: ${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}
-            ${pinyinPrefix ? `| 快捷指令: /${pinyinPrefix}tq` : ''}
           </div>
         </div>
         <div style="display: flex; gap: 6px;">
@@ -1792,15 +1792,10 @@ class WeatherLocationPlugin extends Plugin {
       return false;
     }
 
-    // 生成拼音首字母
-    const pinyinPrefix = getPinyinPrefix(city.name);
-    console.log(`[WeatherLocation] 地点 ${city.name} 的首字母: ${pinyinPrefix}`);
-
     this.config.favoriteCities.push({
       name: city.name,
       lat: city.lat,
       lon: city.lon,
-      pinyinPrefix: pinyinPrefix,
       address: city.address || city.displayName || city.name
     });
     return true;
@@ -1814,7 +1809,7 @@ class WeatherLocationPlugin extends Plugin {
   }
 
   // 手动录入地点
-  private addManualCity(name: string, lat: number, lon: number, customPrefix?: string): boolean {
+  private addManualCity(name: string, lat: number, lon: number): boolean {
     // 检查是否已达到最大数量
     if (this.config.favoriteCities.length >= MAX_FAVORITE_CITIES) {
       showMessage(`最多只能添加 ${MAX_FAVORITE_CITIES} 个常用地点`);
@@ -1833,15 +1828,10 @@ class WeatherLocationPlugin extends Plugin {
       return false;
     }
 
-    // 使用自定义前缀或自动生成
-    const pinyinPrefix = customPrefix?.trim() || getPinyinPrefix(name);
-    console.log(`[WeatherLocation] 手动添加地点 ${name} 的首字母: ${pinyinPrefix}`);
-
     this.config.favoriteCities.push({
       name: name.trim(),
       lat: lat,
       lon: lon,
-      pinyinPrefix: pinyinPrefix,
       address: name.trim()
     });
 
@@ -1873,11 +1863,6 @@ class WeatherLocationPlugin extends Plugin {
       name: updates.name?.trim() || city.name
     };
 
-    // 特殊处理 pinyinPrefix：如果提供了值（包括空字符串），则更新；否则保留原值
-    if (updates.pinyinPrefix !== undefined) {
-      updatedCity.pinyinPrefix = updates.pinyinPrefix.trim();
-    }
-
     this.config.favoriteCities[index] = updatedCity;
 
     console.log(`[WeatherLocation] 更新地点 ${index}:`, this.config.favoriteCities[index]);
@@ -1901,14 +1886,9 @@ class WeatherLocationPlugin extends Plugin {
             <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">纬度</label>
             <input type="text" id="edit-city-lat" value="${city.lat}" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
           </div>
-          <div style="margin-bottom: 12px;">
+          <div style="margin-bottom: 20px;">
             <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">经度</label>
             <input type="text" id="edit-city-lon" value="${city.lon}" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-          </div>
-          <div style="margin-bottom: 20px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">快捷指令前缀（如：bj）</label>
-            <input type="text" id="edit-city-prefix" value="${this.escapeAttribute(city.pinyinPrefix || '')}" placeholder="留空则自动生成" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
-            <div style="font-size: 12px; color: #999; margin-top: 4px;">完整指令格式：前缀+tq（如：bjtq）</div>
           </div>
           <div style="display: flex; gap: 10px; justify-content: flex-end;">
             <button id="edit-city-cancel" style="padding: 8px 16px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; font-size: 14px;">取消</button>
@@ -1935,12 +1915,10 @@ class WeatherLocationPlugin extends Plugin {
         const nameInput = container.querySelector('#edit-city-name') as HTMLInputElement;
         const latInput = container.querySelector('#edit-city-lat') as HTMLInputElement;
         const lonInput = container.querySelector('#edit-city-lon') as HTMLInputElement;
-        const prefixInput = container.querySelector('#edit-city-prefix') as HTMLInputElement;
 
         const name = nameInput.value.trim();
         const lat = parseFloat(latInput.value);
         const lon = parseFloat(lonInput.value);
-        const prefix = prefixInput.value.trim();
 
         if (!name || isNaN(lat) || isNaN(lon)) {
           showMessage('请填写完整的地点信息');
@@ -1950,8 +1928,7 @@ class WeatherLocationPlugin extends Plugin {
         if (this.editFavoriteCity(index, {
           name,
           lat,
-          lon,
-          pinyinPrefix: prefix || getPinyinPrefix(name)
+          lon
         })) {
           await this.saveConfig();
           this.updateFavoriteCitiesUI();
@@ -2069,12 +2046,10 @@ class WeatherLocationPlugin extends Plugin {
       const nameInput = container.querySelector('#manual-city-name') as HTMLInputElement;
       const latInput = container.querySelector('#manual-city-lat') as HTMLInputElement;
       const lonInput = container.querySelector('#manual-city-lon') as HTMLInputElement;
-      const prefixInput = container.querySelector('#manual-city-prefix') as HTMLInputElement;
 
       const name = nameInput.value.trim();
       const lat = parseFloat(latInput.value);
       const lon = parseFloat(lonInput.value);
-      const prefix = prefixInput.value.trim();
 
       if (!name) {
         showMessage('请输入地点名称');
@@ -2086,7 +2061,7 @@ class WeatherLocationPlugin extends Plugin {
         return;
       }
 
-      if (this.addManualCity(name, lat, lon, prefix)) {
+      if (this.addManualCity(name, lat, lon)) {
         await this.saveConfig();
         this.updateFavoriteCitiesUI();
         showMessage(`已添加地点：${name}`);
@@ -2095,7 +2070,6 @@ class WeatherLocationPlugin extends Plugin {
         nameInput.value = '';
         latInput.value = '';
         lonInput.value = '';
-        prefixInput.value = '';
       }
     });
   }
@@ -2351,9 +2325,9 @@ class WeatherLocationPlugin extends Plugin {
   private async replaceBlockContent(blockId: string, content: string, triggers: string[] = []) {
     try {
       const currentMarkdown = await this.getBlockMarkdown(blockId);
-      const { content: blockContent, ial } = this.splitBlockIAL(currentMarkdown);
-      const keptMarkdown = this.removeSlashTrigger(blockContent, triggers);
-      const nextContent = this.withBlockIAL(keptMarkdown ? `${keptMarkdown} ${content}` : content, ial);
+      const { content: blockContent, ial } = splitBlockIAL(currentMarkdown);
+      const keptMarkdown = removeSlashTrigger(blockContent, triggers);
+      const nextContent = withBlockIAL(keptMarkdown ? `${keptMarkdown} ${content}` : content, ial);
       await this.updateBlock(blockId, nextContent);
       showMessage('天气位置已插入');
     } catch (error) {
@@ -2361,65 +2335,6 @@ class WeatherLocationPlugin extends Plugin {
     }
   }
 
-  private removeSlashTrigger(markdown: string, triggers: string[]): string {
-    let result = markdown
-      .trim()
-      .replace(/\\\//g, '/')
-      .replace(/／/g, '/');
-    const candidates = Array.from(new Set(
-      triggers.flatMap(trigger => {
-        const normalized = trigger.trim();
-        if (!normalized) return [];
-        const withoutSlash = normalized.replace(/^\//, '');
-        return [
-          normalized,
-          withoutSlash,
-          `/${withoutSlash}`,
-          `、${withoutSlash}`
-        ];
-      })
-    )).sort((a, b) => b.length - a.length);
-
-    for (const candidate of candidates) {
-      if (result.endsWith(candidate)) {
-        result = result.slice(0, -candidate.length);
-        break;
-      }
-    }
-
-    result = result
-      .replace(/[\u200b-\u200d\ufeff]+$/g, '')
-      .replace(/[ \t\u00a0]+$/g, '')
-      .replace(/[、,，/]\s*(tq|天气位置|天气)\s*$/i, '')
-      .replace(/\b(tq|tianqi\s+weizhi|weather\s+location)\s*$/i, '');
-
-    return result.replace(/[ \t\u00a0]+$/g, '').trim();
-  }
-
-  private splitBlockIAL(markdown: string): { content: string; ial: string } {
-    const lines = markdown.split('\n');
-    const ialLines: string[] = [];
-    const contentLines = lines.filter(line => {
-      if (/^\s*\{:\s+.*\}\s*$/.test(line)) {
-        ialLines.push(line.trim());
-        return false;
-      }
-      return true;
-    });
-
-    return {
-      content: contentLines.join('\n'),
-      ial: ialLines.join('\n')
-    };
-  }
-
-  private withBlockIAL(content: string, ial: string): string {
-    const trimmedContent = content.trim();
-    if (!ial) {
-      return trimmedContent;
-    }
-    return `${trimmedContent}\n${ial}`;
-  }
 
   private async getBlockMarkdown(blockId: string): Promise<string> {
     const response = await fetch('/api/block/getBlockKramdown', {
