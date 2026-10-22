@@ -235,22 +235,11 @@ class WeatherLocationPlugin extends Plugin {
     return renderOutputConfig(this.config.outputConfig, data);
   }
 
-  // 基础斜杠命令（插入天气位置模板 + 插入天气弹窗），注册与更新时保持一致
+  // 斜杠命令：只保留「插入天气」弹窗入口，注册与更新时保持一致
   private createBaseSlashCommands(): any[] {
     return [
       {
-        filter: ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气'],
-        html: '<span class="b3-list-item__text">🌤📍 插入天气位置模板</span>',
-        id: 'insert-weather-location-template',
-        callback: async (protyle: any, nodeElement: HTMLElement) => {
-          const data = await this.getTemplateData();
-          if (!data) return;
-          const content = this.renderConfiguredOutput(data);
-          this.replaceBlockContent(nodeElement.dataset.nodeId || '', content, ['天气位置', 'weather location', 'tianqi weizhi', '/tq', '/天气']);
-        }
-      },
-      {
-        filter: ['插入天气', 'insert weather', 'crtq', 'charu tianqi'],
+        filter: ['插入天气', '天气', 'insert weather', 'tq', 'crtq', 'charu tianqi'],
         html: '<span class="b3-list-item__text">🌤 插入天气（选择地点）</span>',
         id: 'insert-weather-dialog',
         callback: async (protyle: any, nodeElement: HTMLElement) => {
@@ -259,7 +248,7 @@ class WeatherLocationPlugin extends Plugin {
             showMessage('无法定位当前块，插入失败');
             return;
           }
-          this.openWeatherInsertDialog(blockId, ['插入天气', 'insert weather', 'crtq', 'charu tianqi']);
+          this.openWeatherInsertDialog(blockId, ['插入天气', '天气', 'insert weather', 'tq', 'crtq', 'charu tianqi']);
         }
       }
     ];
@@ -860,7 +849,7 @@ class WeatherLocationPlugin extends Plugin {
               </div>
             </div>
             <div class="wl-preview">
-              <div class="wl-preview__label">实时预览</div>
+              <div class="wl-preview__label">实时预览（示例数据，实际插入时使用真实天气）</div>
               <pre id="output-preview">${this.escapeHtml(this.renderOutputPreview())}</pre>
             </div>
             <div class="wl-action-row">
